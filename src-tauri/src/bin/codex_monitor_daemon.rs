@@ -37,7 +37,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use ignore::WalkBuilder;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::process::Command;
 use tokio::sync::{broadcast, mpsc, Mutex};
@@ -1353,13 +1353,45 @@ impl DaemonState {
         command.stdout(Stdio::piped());
         command.stderr(Stdio::piped());
 
-        let output = match timeout(Duration::from_secs(120), command.output()).await {
+        let mut child = command.spawn().map_err(|error| error.to_string())?;
+        let stdout_pipe = child.stdout.take();
+        let stderr_pipe = child.stderr.take();
+
+        let stdout_task = tokio::spawn(async move {
+            let mut buffer = Vec::new();
+            if let Some(mut stdout) = stdout_pipe {
+                let _ = stdout.read_to_end(&mut buffer).await;
+            }
+            buffer
+        });
+        let stderr_task = tokio::spawn(async move {
+            let mut buffer = Vec::new();
+            if let Some(mut stderr) = stderr_pipe {
+                let _ = stderr.read_to_end(&mut buffer).await;
+            }
+            buffer
+        });
+
+        let status = match timeout(Duration::from_secs(120), child.wait()).await {
             Ok(result) => result.map_err(|error| error.to_string())?,
-            Err(_) => return Err("Codex login timed out.".to_string()),
+            Err(_) => {
+                let _ = child.kill().await;
+                let _ = child.wait().await;
+                return Err("Codex login timed out.".to_string());
+            }
         };
 
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stdout_bytes = match stdout_task.await {
+            Ok(bytes) => bytes,
+            Err(_) => Vec::new(),
+        };
+        let stderr_bytes = match stderr_task.await {
+            Ok(bytes) => bytes,
+            Err(_) => Vec::new(),
+        };
+
+        let stdout = String::from_utf8_lossy(&stdout_bytes);
+        let stderr = String::from_utf8_lossy(&stderr_bytes);
         let detail = if stderr.trim().is_empty() {
             stdout.trim()
         } else {
@@ -1374,7 +1406,7 @@ impl DaemonState {
         };
         let limited = combined.chars().take(4000).collect::<String>();
 
-        if !output.status.success() {
+        if !status.success() {
             return Err(if detail.is_empty() {
                 "Codex login failed.".to_string()
             } else {
