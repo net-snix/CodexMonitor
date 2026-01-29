@@ -1223,18 +1223,26 @@ fn build_account_response(response: Option<Value>, fallback: Option<AuthAccount>
         .and_then(extract_account_map)
         .unwrap_or_default();
     if let Some(fallback) = fallback {
-        if !account.contains_key("email") {
-            if let Some(email) = fallback.email {
-                account.insert("email".to_string(), Value::String(email));
+        let account_type = account
+            .get("type")
+            .and_then(|value| value.as_str())
+            .map(|value| value.to_ascii_lowercase());
+        let allow_fallback = account.is_empty()
+            || matches!(account_type.as_deref(), None | Some("chatgpt") | Some("unknown"));
+        if allow_fallback {
+            if !account.contains_key("email") {
+                if let Some(email) = fallback.email {
+                    account.insert("email".to_string(), Value::String(email));
+                }
             }
-        }
-        if !account.contains_key("planType") {
-            if let Some(plan) = fallback.plan_type {
-                account.insert("planType".to_string(), Value::String(plan));
+            if !account.contains_key("planType") {
+                if let Some(plan) = fallback.plan_type {
+                    account.insert("planType".to_string(), Value::String(plan));
+                }
             }
-        }
-        if !account.contains_key("type") {
-            account.insert("type".to_string(), Value::String("chatgpt".to_string()));
+            if !account.contains_key("type") {
+                account.insert("type".to_string(), Value::String("chatgpt".to_string()));
+            }
         }
     }
 
@@ -1326,6 +1334,73 @@ fn read_auth_account(codex_home: Option<PathBuf>) -> Option<AuthAccount> {
         email,
         plan_type: plan,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn fallback_account() -> AuthAccount {
+        AuthAccount {
+            email: Some("chatgpt@example.com".to_string()),
+            plan_type: Some("plus".to_string()),
+        }
+    }
+
+    fn result_account_map(value: &Value) -> Map<String, Value> {
+        value
+            .get("account")
+            .and_then(Value::as_object)
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    #[test]
+    fn build_account_response_does_not_fallback_for_apikey() {
+        let response = Some(json!({
+            "account": {
+                "type": "apikey"
+            }
+        }));
+        let result = build_account_response(response, Some(fallback_account()));
+        let account = result_account_map(&result);
+
+        assert_eq!(account.get("type").and_then(Value::as_str), Some("apikey"));
+        assert!(!account.contains_key("email"));
+        assert!(!account.contains_key("planType"));
+    }
+
+    #[test]
+    fn build_account_response_falls_back_when_account_missing() {
+        let result = build_account_response(None, Some(fallback_account()));
+        let account = result_account_map(&result);
+
+        assert_eq!(
+            account.get("email").and_then(Value::as_str),
+            Some("chatgpt@example.com"),
+        );
+        assert_eq!(account.get("planType").and_then(Value::as_str), Some("plus"));
+        assert_eq!(account.get("type").and_then(Value::as_str), Some("chatgpt"));
+    }
+
+    #[test]
+    fn build_account_response_allows_fallback_for_chatgpt_type() {
+        let response = Some(json!({
+            "account": {
+                "type": "chatgpt"
+            }
+        }));
+        let result = build_account_response(response, Some(fallback_account()));
+        let account = result_account_map(&result);
+
+        assert_eq!(account.get("type").and_then(Value::as_str), Some("chatgpt"));
+        assert_eq!(
+            account.get("email").and_then(Value::as_str),
+            Some("chatgpt@example.com"),
+        );
+        assert_eq!(account.get("planType").and_then(Value::as_str), Some("plus"));
+    }
 }
 
 fn decode_jwt_payload(token: &str) -> Option<Value> {
