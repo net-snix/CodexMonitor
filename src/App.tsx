@@ -1529,6 +1529,7 @@ function MainApp() {
     activeThreadId,
     activeItems,
     activeRateLimits,
+    usageShowRemaining: appSettings.usageShowRemaining,
     codeBlockCopyUseModifier: appSettings.composerCodeBlockCopyUseModifier,
     openAppTargets: appSettings.openAppTargets,
     openAppIconById,
