@@ -22,6 +22,7 @@ const baseProps = {
   usageShowRemaining: false,
   accountInfo: null,
   onSwitchAccount: vi.fn(),
+  onCancelSwitchAccount: vi.fn(),
   accountSwitching: false,
   onOpenSettings: vi.fn(),
   onOpenDebug: vi.fn(),

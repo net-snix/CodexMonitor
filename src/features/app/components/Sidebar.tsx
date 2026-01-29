@@ -55,6 +55,7 @@ type SidebarProps = {
   usageShowRemaining: boolean;
   accountInfo: AccountSnapshot | null;
   onSwitchAccount: () => void;
+  onCancelSwitchAccount: () => void;
   accountSwitching: boolean;
   onOpenSettings: () => void;
   onOpenDebug: () => void;
@@ -105,6 +106,7 @@ export function Sidebar({
   usageShowRemaining,
   accountInfo,
   onSwitchAccount,
+  onCancelSwitchAccount,
   accountSwitching,
   onOpenSettings,
   onOpenDebug,
@@ -227,6 +229,7 @@ export function Sidebar({
   const accountActionLabel = accountEmail ? "Switch account" : "Sign in";
   const showAccountSwitcher = Boolean(activeWorkspaceId);
   const accountSwitchDisabled = accountSwitching || !activeWorkspaceId;
+  const accountCancelDisabled = !accountSwitching || !activeWorkspaceId;
 
   const pinnedThreadRows = (() => {
     type ThreadRow = { thread: ThreadSummary; depth: number };
@@ -639,7 +642,10 @@ export function Sidebar({
         accountLabel={accountButtonLabel}
         accountActionLabel={accountActionLabel}
         accountDisabled={accountSwitchDisabled}
+        accountSwitching={accountSwitching}
+        accountCancelDisabled={accountCancelDisabled}
         onSwitchAccount={onSwitchAccount}
+        onCancelSwitchAccount={onCancelSwitchAccount}
       />
     </aside>
   );

@@ -5,12 +5,13 @@ use std::io::ErrorKind;
 use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use tauri::{AppHandle, State};
 use tokio::io::AsyncReadExt;
 use tokio::process::Command;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, oneshot};
 use tokio::time::timeout;
 
 pub(crate) use crate::backend::app_server::WorkspaceSession;
@@ -603,6 +604,35 @@ pub(crate) async fn codex_login(
     command.stderr(Stdio::piped());
 
     let mut child = command.spawn().map_err(|error| error.to_string())?;
+    let (cancel_tx, cancel_rx) = oneshot::channel::<()>();
+    {
+        let mut cancels = state.codex_login_cancels.lock().await;
+        if let Some(existing) = cancels.remove(&workspace_id) {
+            let _ = existing.send(());
+        }
+        cancels.insert(workspace_id.clone(), cancel_tx);
+    }
+    let pid = child.id();
+    let canceled = Arc::new(AtomicBool::new(false));
+    let canceled_for_task = Arc::clone(&canceled);
+    let cancel_task = tokio::spawn(async move {
+        if cancel_rx.await.is_ok() {
+            canceled_for_task.store(true, Ordering::Relaxed);
+            if let Some(pid) = pid {
+                #[cfg(not(target_os = "windows"))]
+                unsafe {
+                    libc::kill(pid as i32, libc::SIGKILL);
+                }
+                #[cfg(target_os = "windows")]
+                {
+                    let _ = Command::new("taskkill")
+                        .args(["/PID", &pid.to_string(), "/T", "/F"])
+                        .status()
+                        .await;
+                }
+            }
+        }
+    });
     let stdout_pipe = child.stdout.take();
     let stderr_pipe = child.stderr.take();
 
@@ -626,9 +656,24 @@ pub(crate) async fn codex_login(
         Err(_) => {
             let _ = child.kill().await;
             let _ = child.wait().await;
+            cancel_task.abort();
+            {
+                let mut cancels = state.codex_login_cancels.lock().await;
+                cancels.remove(&workspace_id);
+            }
             return Err("Codex login timed out.".to_string());
         }
     };
+
+    cancel_task.abort();
+    {
+        let mut cancels = state.codex_login_cancels.lock().await;
+        cancels.remove(&workspace_id);
+    }
+
+    if canceled.load(Ordering::Relaxed) {
+        return Err("Codex login canceled.".to_string());
+    }
 
     let stdout_bytes = match stdout_task.await {
         Ok(bytes) => bytes,
@@ -664,6 +709,35 @@ pub(crate) async fn codex_login(
     }
 
     Ok(json!({ "output": limited }))
+}
+
+#[tauri::command]
+pub(crate) async fn codex_login_cancel(
+    workspace_id: String,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<Value, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return remote_backend::call_remote(
+            &*state,
+            app,
+            "codex_login_cancel",
+            json!({ "workspaceId": workspace_id }),
+        )
+        .await;
+    }
+
+    let cancel_tx = {
+        let mut cancels = state.codex_login_cancels.lock().await;
+        cancels.remove(&workspace_id)
+    };
+    let canceled = if let Some(tx) = cancel_tx {
+        let _ = tx.send(());
+        true
+    } else {
+        false
+    };
+    Ok(json!({ "canceled": canceled }))
 }
 
 #[tauri::command]

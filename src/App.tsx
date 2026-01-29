@@ -95,7 +95,7 @@ import { useGitCommitController } from "./features/app/hooks/useGitCommitControl
 import { WorkspaceHome } from "./features/workspaces/components/WorkspaceHome";
 import { useWorkspaceHome } from "./features/workspaces/hooks/useWorkspaceHome";
 import { useWorkspaceAgentMd } from "./features/workspaces/hooks/useWorkspaceAgentMd";
-import { pickWorkspacePath, runCodexLogin } from "./services/tauri";
+import { cancelCodexLogin, pickWorkspacePath, runCodexLogin } from "./services/tauri";
 import type {
   AccessMode,
   ComposerEditorSettings,
@@ -632,6 +632,7 @@ function MainApp() {
     onMessageActivity: queueGitStatusRefresh
   });
   const [accountSwitching, setAccountSwitching] = useState(false);
+  const accountSwitchCanceledRef = useRef(false);
   const activeAccount = activeWorkspaceId
     ? accountByWorkspace[activeWorkspaceId] ?? null
     : null;
@@ -1115,19 +1116,38 @@ function MainApp() {
     [activeWorkspace, connectWorkspace, sendUserMessageToThread, startThreadForWorkspace],
   );
 
+  const isCodexLoginCanceled = useCallback((error: unknown) => {
+    const message =
+      typeof error === "string" ? error : error instanceof Error ? error.message : "";
+    const normalized = message.toLowerCase();
+    return (
+      normalized.includes("codex login canceled") ||
+      normalized.includes("codex login cancelled") ||
+      normalized.includes("request canceled")
+    );
+  }, []);
+
   const handleSwitchAccount = useCallback(async () => {
     if (!activeWorkspaceId || accountSwitching) {
       return;
     }
+    accountSwitchCanceledRef.current = false;
     setAccountSwitching(true);
     try {
       await runCodexLogin(activeWorkspaceId);
+      if (accountSwitchCanceledRef.current) {
+        return;
+      }
       await refreshAccountInfo(activeWorkspaceId);
       await refreshAccountRateLimits(activeWorkspaceId);
     } catch (error) {
+      if (accountSwitchCanceledRef.current || isCodexLoginCanceled(error)) {
+        return;
+      }
       alertError(error);
     } finally {
       setAccountSwitching(false);
+      accountSwitchCanceledRef.current = false;
     }
   }, [
     activeWorkspaceId,
@@ -1135,7 +1155,22 @@ function MainApp() {
     refreshAccountInfo,
     refreshAccountRateLimits,
     alertError,
+    isCodexLoginCanceled,
   ]);
+
+  const handleCancelSwitchAccount = useCallback(async () => {
+    if (!activeWorkspaceId || !accountSwitching) {
+      return;
+    }
+    accountSwitchCanceledRef.current = true;
+    try {
+      await cancelCodexLogin(activeWorkspaceId);
+    } catch (error) {
+      alertError(error);
+    } finally {
+      setAccountSwitching(false);
+    }
+  }, [activeWorkspaceId, accountSwitching, alertError]);
 
 
   const handleCreatePrompt = useCallback(
@@ -1563,6 +1598,7 @@ function MainApp() {
     usageShowRemaining: appSettings.usageShowRemaining,
     accountInfo: activeAccount,
     onSwitchAccount: handleSwitchAccount,
+    onCancelSwitchAccount: handleCancelSwitchAccount,
     accountSwitching,
     codeBlockCopyUseModifier: appSettings.composerCodeBlockCopyUseModifier,
     openAppTargets: appSettings.openAppTargets,

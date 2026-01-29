@@ -145,6 +145,7 @@ pub fn run() {
             codex::account_rate_limits,
             codex::account_read,
             codex::codex_login,
+            codex::codex_login_cancel,
             codex::skills_list,
             prompts::prompts_list,
             prompts::prompts_create,

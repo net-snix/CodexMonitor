@@ -113,6 +113,7 @@ type LayoutNodesOptions = {
   usageShowRemaining: boolean;
   accountInfo: AccountSnapshot | null;
   onSwitchAccount: () => void;
+  onCancelSwitchAccount: () => void;
   accountSwitching: boolean;
   codeBlockCopyUseModifier: boolean;
   openAppTargets: OpenAppTarget[];
@@ -443,6 +444,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       usageShowRemaining={options.usageShowRemaining}
       accountInfo={options.accountInfo}
       onSwitchAccount={options.onSwitchAccount}
+      onCancelSwitchAccount={options.onCancelSwitchAccount}
       accountSwitching={options.accountSwitching}
       onOpenSettings={options.onOpenSettings}
       onOpenDebug={options.onOpenDebug}
