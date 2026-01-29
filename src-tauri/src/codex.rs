@@ -1,6 +1,9 @@
+use base64::Engine;
 use serde_json::{json, Map, Value};
+use std::fs;
 use std::io::ErrorKind;
 use std::path::PathBuf;
+use std::process::Stdio;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -14,7 +17,7 @@ use crate::backend::app_server::{
     build_codex_command_with_bin, build_codex_path_env, check_codex_installation,
     spawn_workspace_session as spawn_workspace_session_inner,
 };
-use crate::codex_args::apply_codex_args;
+use crate::codex_args::{apply_codex_args, resolve_workspace_codex_args};
 use crate::codex_config;
 use crate::codex_home::{resolve_default_codex_home, resolve_workspace_codex_home};
 use crate::event_sink::TauriEventSink;
@@ -501,6 +504,133 @@ pub(crate) async fn account_rate_limits(
     session
         .send_request("account/rateLimits/read", Value::Null)
         .await
+}
+
+#[tauri::command]
+pub(crate) async fn account_read(
+    workspace_id: String,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<Value, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return remote_backend::call_remote(
+            &*state,
+            app,
+            "account_read",
+            json!({ "workspaceId": workspace_id }),
+        )
+        .await;
+    }
+
+    let session = {
+        let sessions = state.sessions.lock().await;
+        sessions.get(&workspace_id).cloned()
+    };
+    let response = if let Some(session) = session {
+        session.send_request("account/read", Value::Null).await.ok()
+    } else {
+        None
+    };
+
+    let (entry, parent_entry) = {
+        let workspaces = state.workspaces.lock().await;
+        let entry = workspaces
+            .get(&workspace_id)
+            .ok_or("workspace not found")?
+            .clone();
+        let parent_entry = entry
+            .parent_id
+            .as_ref()
+            .and_then(|parent_id| workspaces.get(parent_id))
+            .cloned();
+        (entry, parent_entry)
+    };
+    let codex_home = resolve_workspace_codex_home(&entry, parent_entry.as_ref())
+        .or_else(resolve_default_codex_home);
+    let fallback = read_auth_account(codex_home);
+
+    Ok(build_account_response(response, fallback))
+}
+
+#[tauri::command]
+pub(crate) async fn codex_login(
+    workspace_id: String,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<Value, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return remote_backend::call_remote(
+            &*state,
+            app,
+            "codex_login",
+            json!({ "workspaceId": workspace_id }),
+        )
+        .await;
+    }
+
+    let (entry, parent_entry, settings) = {
+        let workspaces = state.workspaces.lock().await;
+        let entry = workspaces
+            .get(&workspace_id)
+            .ok_or("workspace not found")?
+            .clone();
+        let parent_entry = entry
+            .parent_id
+            .as_ref()
+            .and_then(|parent_id| workspaces.get(parent_id))
+            .cloned();
+        let settings = state.app_settings.lock().await.clone();
+        (entry, parent_entry, settings)
+    };
+
+    let codex_bin = entry
+        .codex_bin
+        .clone()
+        .filter(|value| !value.trim().is_empty())
+        .or(settings.codex_bin.clone());
+    let codex_args = resolve_workspace_codex_args(&entry, parent_entry.as_ref(), Some(&settings));
+    let codex_home = resolve_workspace_codex_home(&entry, parent_entry.as_ref())
+        .or_else(resolve_default_codex_home);
+
+    let mut command = build_codex_command_with_bin(codex_bin);
+    if let Some(ref codex_home) = codex_home {
+        command.env("CODEX_HOME", codex_home);
+    }
+    apply_codex_args(&mut command, codex_args.as_deref())?;
+    command.arg("login");
+    command.stdout(Stdio::piped());
+    command.stderr(Stdio::piped());
+
+    let output = match timeout(Duration::from_secs(120), command.output()).await {
+        Ok(result) => result.map_err(|error| error.to_string())?,
+        Err(_) => return Err("Codex login timed out.".to_string()),
+    };
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let detail = if stderr.trim().is_empty() {
+        stdout.trim()
+    } else {
+        stderr.trim()
+    };
+    let combined = if stdout.trim().is_empty() {
+        stderr.trim().to_string()
+    } else if stderr.trim().is_empty() {
+        stdout.trim().to_string()
+    } else {
+        format!("{}\n{}", stdout.trim(), stderr.trim())
+    };
+    let limited = combined.chars().take(4000).collect::<String>();
+
+    if !output.status.success() {
+        return Err(if detail.is_empty() {
+            "Codex login failed.".to_string()
+        } else {
+            format!("Codex login failed: {detail}")
+        });
+    }
+
+    Ok(json!({ "output": limited }))
 }
 
 #[tauri::command]
@@ -1047,4 +1177,136 @@ fn sanitize_run_worktree_name(value: &str) -> String {
         }
     }
     format!("feat/{}", cleaned.trim_start_matches('/'))
+}
+
+struct AuthAccount {
+    email: Option<String>,
+    plan_type: Option<String>,
+}
+
+fn build_account_response(response: Option<Value>, fallback: Option<AuthAccount>) -> Value {
+    let mut account = response
+        .as_ref()
+        .and_then(extract_account_map)
+        .unwrap_or_default();
+    if let Some(fallback) = fallback {
+        if !account.contains_key("email") {
+            if let Some(email) = fallback.email {
+                account.insert("email".to_string(), Value::String(email));
+            }
+        }
+        if !account.contains_key("planType") {
+            if let Some(plan) = fallback.plan_type {
+                account.insert("planType".to_string(), Value::String(plan));
+            }
+        }
+        if !account.contains_key("type") {
+            account.insert("type".to_string(), Value::String("chatgpt".to_string()));
+        }
+    }
+
+    let account_value = if account.is_empty() {
+        Value::Null
+    } else {
+        Value::Object(account)
+    };
+    let mut result = Map::new();
+    result.insert("account".to_string(), account_value);
+    if let Some(requires_openai_auth) = response
+        .as_ref()
+        .and_then(extract_requires_openai_auth)
+    {
+        result.insert(
+            "requiresOpenaiAuth".to_string(),
+            Value::Bool(requires_openai_auth),
+        );
+    }
+    Value::Object(result)
+}
+
+fn extract_account_map(value: &Value) -> Option<Map<String, Value>> {
+    let account = value
+        .get("account")
+        .or_else(|| value.get("result").and_then(|result| result.get("account")))
+        .and_then(|value| value.as_object().cloned());
+    if account.is_some() {
+        return account;
+    }
+    let root = value.as_object()?;
+    if root.contains_key("email") || root.contains_key("planType") || root.contains_key("type") {
+        return Some(root.clone());
+    }
+    None
+}
+
+fn extract_requires_openai_auth(value: &Value) -> Option<bool> {
+    value
+        .get("requiresOpenaiAuth")
+        .or_else(|| value.get("requires_openai_auth"))
+        .or_else(|| {
+            value
+                .get("result")
+                .and_then(|result| result.get("requiresOpenaiAuth"))
+        })
+        .or_else(|| {
+            value
+                .get("result")
+                .and_then(|result| result.get("requires_openai_auth"))
+        })
+        .and_then(|value| value.as_bool())
+}
+
+fn read_auth_account(codex_home: Option<PathBuf>) -> Option<AuthAccount> {
+    let codex_home = codex_home?;
+    let auth_path = codex_home.join("auth.json");
+    let data = fs::read(auth_path).ok()?;
+    let auth_value: Value = serde_json::from_slice(&data).ok()?;
+    let tokens = auth_value.get("tokens")?;
+    let id_token = tokens
+        .get("idToken")
+        .or_else(|| tokens.get("id_token"))
+        .and_then(|value| value.as_str())?;
+    let payload = decode_jwt_payload(id_token)?;
+
+    let auth_dict = payload
+        .get("https://api.openai.com/auth")
+        .and_then(|value| value.as_object());
+    let profile_dict = payload
+        .get("https://api.openai.com/profile")
+        .and_then(|value| value.as_object());
+    let plan = normalize_string(
+        auth_dict
+            .and_then(|dict| dict.get("chatgpt_plan_type"))
+            .or_else(|| payload.get("chatgpt_plan_type")),
+    );
+    let email = normalize_string(
+        payload
+            .get("email")
+            .or_else(|| profile_dict.and_then(|dict| dict.get("email"))),
+    );
+
+    if email.is_none() && plan.is_none() {
+        return None;
+    }
+
+    Some(AuthAccount {
+        email,
+        plan_type: plan,
+    })
+}
+
+fn decode_jwt_payload(token: &str) -> Option<Value> {
+    let payload = token.split('.').nth(1)?;
+    let decoded = base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .decode(payload.as_bytes())
+        .or_else(|_| base64::engine::general_purpose::URL_SAFE.decode(payload.as_bytes()))
+        .ok()?;
+    serde_json::from_slice(&decoded).ok()
+}
+
+fn normalize_string(value: Option<&Value>) -> Option<String> {
+    value
+        .and_then(|value| value.as_str())
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
 }

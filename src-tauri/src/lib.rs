@@ -143,6 +143,8 @@ pub fn run() {
             git::create_git_branch,
             codex::model_list,
             codex::account_rate_limits,
+            codex::account_read,
+            codex::codex_login,
             codex::skills_list,
             prompts::prompts_list,
             prompts::prompts_create,

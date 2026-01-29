@@ -95,7 +95,7 @@ import { useGitCommitController } from "./features/app/hooks/useGitCommitControl
 import { WorkspaceHome } from "./features/workspaces/components/WorkspaceHome";
 import { useWorkspaceHome } from "./features/workspaces/hooks/useWorkspaceHome";
 import { useWorkspaceAgentMd } from "./features/workspaces/hooks/useWorkspaceAgentMd";
-import { pickWorkspacePath } from "./services/tauri";
+import { pickWorkspacePath, runCodexLogin } from "./services/tauri";
 import type {
   AccessMode,
   ComposerEditorSettings,
@@ -594,6 +594,7 @@ function MainApp() {
     threadListCursorByWorkspace,
     tokenUsageByThread,
     rateLimitsByWorkspace,
+    accountByWorkspace,
     planByThread,
     lastAgentMessageByThread,
     interruptTurn,
@@ -614,6 +615,8 @@ function MainApp() {
     handleApprovalDecision,
     handleApprovalRemember,
     handleUserInputSubmit,
+    refreshAccountInfo,
+    refreshAccountRateLimits,
   } = useThreads({
     activeWorkspace,
     onWorkspaceConnected: markWorkspaceConnected,
@@ -626,6 +629,10 @@ function MainApp() {
     customPrompts: prompts,
     onMessageActivity: queueGitStatusRefresh
   });
+  const [accountSwitching, setAccountSwitching] = useState(false);
+  const activeAccount = activeWorkspaceId
+    ? accountByWorkspace[activeWorkspaceId] ?? null
+    : null;
   const activeThreadIdRef = useRef<string | null>(activeThreadId ?? null);
   const { getThreadRows } = useThreadRows(threadParentById);
   useEffect(() => {
@@ -1106,6 +1113,28 @@ function MainApp() {
     [activeWorkspace, connectWorkspace, sendUserMessageToThread, startThreadForWorkspace],
   );
 
+  const handleSwitchAccount = useCallback(async () => {
+    if (!activeWorkspaceId || accountSwitching) {
+      return;
+    }
+    setAccountSwitching(true);
+    try {
+      await runCodexLogin(activeWorkspaceId);
+      await refreshAccountInfo(activeWorkspaceId);
+      await refreshAccountRateLimits(activeWorkspaceId);
+    } catch (error) {
+      alertError(error);
+    } finally {
+      setAccountSwitching(false);
+    }
+  }, [
+    activeWorkspaceId,
+    accountSwitching,
+    refreshAccountInfo,
+    refreshAccountRateLimits,
+    alertError,
+  ]);
+
 
   const handleCreatePrompt = useCallback(
     async (data: {
@@ -1529,6 +1558,9 @@ function MainApp() {
     activeThreadId,
     activeItems,
     activeRateLimits,
+    accountInfo: activeAccount,
+    onSwitchAccount: handleSwitchAccount,
+    accountSwitching,
     codeBlockCopyUseModifier: appSettings.composerCodeBlockCopyUseModifier,
     openAppTargets: appSettings.openAppTargets,
     openAppIconById,

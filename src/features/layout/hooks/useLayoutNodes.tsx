@@ -26,6 +26,7 @@ import type {
   ConversationItem,
   ComposerEditorSettings,
   CustomPromptOption,
+  AccountSnapshot,
   DebugEntry,
   DictationSessionState,
   DictationTranscript,
@@ -109,6 +110,9 @@ type LayoutNodesOptions = {
   activeThreadId: string | null;
   activeItems: ConversationItem[];
   activeRateLimits: RateLimitSnapshot | null;
+  accountInfo: AccountSnapshot | null;
+  onSwitchAccount: () => void;
+  accountSwitching: boolean;
   codeBlockCopyUseModifier: boolean;
   openAppTargets: OpenAppTarget[];
   openAppIconById: Record<string, string>;
@@ -435,6 +439,9 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       activeWorkspaceId={options.activeWorkspaceId}
       activeThreadId={options.activeThreadId}
       accountRateLimits={options.activeRateLimits}
+      accountInfo={options.accountInfo}
+      onSwitchAccount={options.onSwitchAccount}
+      accountSwitching={options.accountSwitching}
       onOpenSettings={options.onOpenSettings}
       onOpenDebug={options.onOpenDebug}
       showDebugButton={options.showDebugButton}

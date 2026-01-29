@@ -465,6 +465,14 @@ export async function getAccountRateLimits(workspaceId: string) {
   return invoke<any>("account_rate_limits", { workspaceId });
 }
 
+export async function getAccountInfo(workspaceId: string) {
+  return invoke<any>("account_read", { workspaceId });
+}
+
+export async function runCodexLogin(workspaceId: string) {
+  return invoke<{ output: string }>("codex_login", { workspaceId });
+}
+
 export async function getSkillsList(workspaceId: string) {
   return invoke<any>("skills_list", { workspaceId });
 }
