@@ -189,10 +189,27 @@ export function useThreads({
         return null;
       }
     } else if (!loadedThreadsRef.current[threadId]) {
-      await resumeThreadForWorkspace(activeWorkspace.id, threadId);
+      const resumed = await resumeThreadForWorkspace(activeWorkspace.id, threadId);
+      if (!resumed) {
+        dispatch({
+          type: "setActiveThreadId",
+          workspaceId: activeWorkspace.id,
+          threadId: null,
+        });
+        threadId = await startThreadForWorkspace(activeWorkspace.id);
+        if (!threadId) {
+          return null;
+        }
+      }
     }
     return threadId;
-  }, [activeWorkspace, activeThreadId, resumeThreadForWorkspace, startThreadForWorkspace]);
+  }, [
+    activeWorkspace,
+    activeThreadId,
+    dispatch,
+    resumeThreadForWorkspace,
+    startThreadForWorkspace,
+  ]);
 
   const ensureThreadForWorkspace = useCallback(
     async (workspaceId: string) => {
@@ -207,7 +224,18 @@ export function useThreads({
           return null;
         }
       } else if (!loadedThreadsRef.current[threadId]) {
-        await resumeThreadForWorkspace(workspaceId, threadId);
+        const resumed = await resumeThreadForWorkspace(workspaceId, threadId);
+        if (!resumed) {
+          if (shouldActivate) {
+            dispatch({ type: "setActiveThreadId", workspaceId, threadId: null });
+          }
+          threadId = await startThreadForWorkspace(workspaceId, {
+            activate: shouldActivate,
+          });
+          if (!threadId) {
+            return null;
+          }
+        }
       }
       if (shouldActivate && currentActiveThreadId !== threadId) {
         dispatch({ type: "setActiveThreadId", workspaceId, threadId });

@@ -453,9 +453,34 @@ impl DaemonState {
         settings_core::get_app_settings_core(&self.app_settings).await
     }
 
-    async fn update_app_settings(&self, settings: AppSettings) -> Result<AppSettings, String> {
-        settings_core::update_app_settings_core(settings, &self.app_settings, &self.settings_path)
-            .await
+    async fn update_app_settings(
+        &self,
+        settings: AppSettings,
+        client_version: String,
+    ) -> Result<AppSettings, String> {
+        let previous = self.app_settings.lock().await.clone();
+        let updated =
+            settings_core::update_app_settings_core(settings, &self.app_settings, &self.settings_path)
+                .await?;
+        let event_sink = self.event_sink.clone();
+        let _ = workspaces_core::respawn_sessions_for_app_settings_change_core(
+            &self.workspaces,
+            &self.sessions,
+            &previous,
+            &updated,
+            move |entry, default_bin, codex_args, codex_home| {
+                spawn_with_client(
+                    event_sink.clone(),
+                    client_version.clone(),
+                    entry,
+                    default_bin,
+                    codex_args,
+                    codex_home,
+                )
+            },
+        )
+        .await;
+        Ok(updated)
     }
 
     async fn list_workspace_files(&self, workspace_id: String) -> Result<Vec<String>, String> {
@@ -485,7 +510,14 @@ impl DaemonState {
         kind: file_policy::FileKind,
         workspace_id: Option<String>,
     ) -> Result<file_io::TextFileResponse, String> {
-        files_core::file_read_core(&self.workspaces, scope, kind, workspace_id).await
+        files_core::file_read_core(
+            &self.workspaces,
+            &self.app_settings,
+            scope,
+            kind,
+            workspace_id,
+        )
+        .await
     }
 
     async fn file_write(
@@ -495,7 +527,15 @@ impl DaemonState {
         workspace_id: Option<String>,
         content: String,
     ) -> Result<(), String> {
-        files_core::file_write_core(&self.workspaces, scope, kind, workspace_id, content).await
+        files_core::file_write_core(
+            &self.workspaces,
+            &self.app_settings,
+            scope,
+            kind,
+            workspace_id,
+            content,
+        )
+        .await
     }
 
     async fn start_thread(&self, workspace_id: String) -> Result<Value, String> {
@@ -590,7 +630,50 @@ impl DaemonState {
     }
 
     async fn account_read(&self, workspace_id: String) -> Result<Value, String> {
-        codex_core::account_read_core(&self.sessions, &self.workspaces, workspace_id).await
+        codex_core::account_read_core(
+            &self.sessions,
+            &self.workspaces,
+            &self.app_settings,
+            workspace_id,
+        )
+        .await
+    }
+
+    async fn codex_auth_store_read(&self) -> Result<Value, String> {
+        codex_core::auth_store_read_core(&self.app_settings).await
+    }
+
+    async fn codex_auth_store_set_file(&self) -> Result<Value, String> {
+        codex_core::auth_store_set_file_core(&self.app_settings).await
+    }
+
+    async fn codex_auth_profile_snapshot(&self, profile_id: String) -> Result<Value, String> {
+        codex_core::auth_profile_snapshot_core(&self.app_settings, profile_id).await
+    }
+
+    async fn codex_auth_profile_apply(&self, profile_id: String) -> Result<Value, String> {
+        codex_core::auth_profile_apply_core(&self.app_settings, profile_id).await
+    }
+
+    async fn respawn_sessions(&self, client_version: String) -> Result<Value, String> {
+        let client_version = client_version.clone();
+        workspaces_core::respawn_sessions_core(
+            &self.workspaces,
+            &self.sessions,
+            &self.app_settings,
+            |entry, default_bin, codex_args, codex_home| {
+                spawn_with_client(
+                    self.event_sink.clone(),
+                    client_version.clone(),
+                    entry,
+                    default_bin,
+                    codex_args,
+                    codex_home,
+                )
+            },
+        )
+        .await?;
+        Ok(json!({ "ok": true }))
     }
 
     async fn codex_login(&self, workspace_id: String) -> Result<Value, String> {
@@ -627,11 +710,17 @@ impl DaemonState {
         workspace_id: String,
         command: Vec<String>,
     ) -> Result<Value, String> {
-        codex_core::remember_approval_rule_core(&self.workspaces, workspace_id, command).await
+        codex_core::remember_approval_rule_core(
+            &self.workspaces,
+            &self.app_settings,
+            workspace_id,
+            command,
+        )
+        .await
     }
 
     async fn get_config_model(&self, workspace_id: String) -> Result<Value, String> {
-        codex_core::get_config_model_core(&self.workspaces, workspace_id).await
+        codex_core::get_config_model_core(&self.workspaces, &self.app_settings, workspace_id).await
     }
 }
 
@@ -1057,17 +1146,18 @@ async fn handle_rpc_request(
             serde_json::to_value(settings).map_err(|err| err.to_string())
         }
         "update_app_settings" => {
-            let settings_value = match params {
-                Value::Object(map) => map.get("settings").cloned().unwrap_or(Value::Null),
-                _ => Value::Null,
+            let settings_value = if let Value::Object(map) = &params {
+                map.get("settings").cloned().unwrap_or_else(|| params.clone())
+            } else {
+                params.clone()
             };
             let settings: AppSettings =
                 serde_json::from_value(settings_value).map_err(|err| err.to_string())?;
-            let updated = state.update_app_settings(settings).await?;
+            let updated = state.update_app_settings(settings, client_version).await?;
             serde_json::to_value(updated).map_err(|err| err.to_string())
         }
         "get_codex_config_path" => {
-            let path = settings_core::get_codex_config_path_core()?;
+            let path = settings_core::get_codex_config_path_core(&state.app_settings).await?;
             Ok(Value::String(path))
         }
         "get_config_model" => {
@@ -1160,6 +1250,16 @@ async fn handle_rpc_request(
             let workspace_id = parse_string(&params, "workspaceId")?;
             state.account_read(workspace_id).await
         }
+        "codex_auth_store_read" => state.codex_auth_store_read().await,
+        "codex_auth_store_set_file" => state.codex_auth_store_set_file().await,
+        "codex_auth_profile_snapshot" => {
+            let profile_id = parse_string(&params, "profileId")?;
+            state.codex_auth_profile_snapshot(profile_id).await
+        }
+        "codex_auth_profile_apply" => {
+            let profile_id = parse_string(&params, "profileId")?;
+            state.codex_auth_profile_apply(profile_id).await
+        }
         "codex_login" => {
             let workspace_id = parse_string(&params, "workspaceId")?;
             state.codex_login(workspace_id).await
@@ -1168,6 +1268,7 @@ async fn handle_rpc_request(
             let workspace_id = parse_string(&params, "workspaceId")?;
             state.codex_login_cancel(workspace_id).await
         }
+        "respawn_sessions" => state.respawn_sessions(client_version).await,
         "skills_list" => {
             let workspace_id = parse_string(&params, "workspaceId")?;
             state.skills_list(workspace_id).await

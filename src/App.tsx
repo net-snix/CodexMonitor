@@ -105,7 +105,7 @@ import type {
 import { OPEN_APP_STORAGE_KEY } from "./features/app/constants";
 import { useOpenAppIcons } from "./features/app/hooks/useOpenAppIcons";
 import { useCodeCssVars } from "./features/app/hooks/useCodeCssVars";
-import { useAccountSwitching } from "./features/app/hooks/useAccountSwitching";
+import { useAccountProfiles } from "./features/app/hooks/useAccountProfiles";
 
 const AboutView = lazy(() =>
   import("./features/about/components/AboutView").then((module) => ({
@@ -130,6 +130,7 @@ function MainApp() {
   const {
     appSettings,
     setAppSettings,
+    saveSettings,
     doctor,
     appSettingsLoading,
     reduceTransparency,
@@ -657,16 +658,38 @@ function MainApp() {
     customPrompts: prompts,
     onMessageActivity: queueGitStatusRefresh
   });
-  const {
-    activeAccount,
-    accountSwitching,
-    handleSwitchAccount,
-    handleCancelSwitchAccount,
-  } = useAccountSwitching({
+  const activeRateLimits = activeWorkspaceId
+    ? rateLimitsByWorkspace[activeWorkspaceId] ?? null
+    : null;
+  const handleProfileSwitchStart = useCallback(
+    (workspaceId: string) => {
+      resetWorkspaceThreads(workspaceId);
+    },
+    [resetWorkspaceThreads],
+  );
+
+  const handleProfileSwitchComplete = useCallback(
+    (workspaceId: string) => {
+      const workspace = workspacesById.get(workspaceId);
+      if (!workspace) {
+        return;
+      }
+      resetWorkspaceThreads(workspaceId);
+      void listThreadsForWorkspace(workspace);
+    },
+    [listThreadsForWorkspace, resetWorkspaceThreads, workspacesById],
+  );
+
+  const { accountSwitcher } = useAccountProfiles({
+    appSettings,
+    saveSettings,
     activeWorkspaceId,
     accountByWorkspace,
+    activeRateLimits,
     refreshAccountInfo,
     refreshAccountRateLimits,
+    onProfileSwitchStart: handleProfileSwitchStart,
+    onProfileSwitchComplete: handleProfileSwitchComplete,
     alertError,
   });
   const activeThreadIdRef = useRef<string | null>(activeThreadId ?? null);
@@ -941,9 +964,6 @@ function MainApp() {
     [hasLoaded, threadListLoadingByWorkspace, workspaces]
   );
 
-  const activeRateLimits = activeWorkspaceId
-    ? rateLimitsByWorkspace[activeWorkspaceId] ?? null
-    : null;
   const activeTokenUsage = activeThreadId
     ? tokenUsageByThread[activeThreadId] ?? null
     : null;
@@ -1581,10 +1601,7 @@ function MainApp() {
     activeItems,
     activeRateLimits,
     usageShowRemaining: appSettings.usageShowRemaining,
-    accountInfo: activeAccount,
-    onSwitchAccount: handleSwitchAccount,
-    onCancelSwitchAccount: handleCancelSwitchAccount,
-    accountSwitching,
+    accountSwitcher,
     codeBlockCopyUseModifier: appSettings.composerCodeBlockCopyUseModifier,
     openAppTargets: appSettings.openAppTargets,
     openAppIconById,

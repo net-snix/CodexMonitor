@@ -7,10 +7,12 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::State;
 
-use crate::codex::home::{resolve_default_codex_home, resolve_workspace_codex_home};
+use crate::codex::home::{
+    resolve_default_codex_home_with_settings, resolve_workspace_codex_home_with_settings,
+};
 use crate::state::AppState;
 use crate::types::{
-    LocalUsageDay, LocalUsageModel, LocalUsageSnapshot, LocalUsageTotals, WorkspaceEntry,
+    AppSettings, LocalUsageDay, LocalUsageModel, LocalUsageSnapshot, LocalUsageTotals, WorkspaceEntry,
 };
 
 #[derive(Default, Clone, Copy)]
@@ -47,8 +49,9 @@ pub(crate) async fn local_usage_snapshot(
         }
     });
     let sessions_roots = {
+        let settings = state.app_settings.lock().await.clone();
         let workspaces = state.workspaces.lock().await;
-        resolve_sessions_roots(&workspaces, workspace_path.as_deref())
+        resolve_sessions_roots(&workspaces, workspace_path.as_deref(), Some(&settings))
     };
     let snapshot = tokio::task::spawn_blocking(move || {
         scan_local_usage(days, workspace_path.as_deref(), &sessions_roots)
@@ -512,26 +515,32 @@ fn make_day_keys(days: u32) -> Vec<String> {
         .collect()
 }
 
-fn resolve_codex_sessions_root(codex_home_override: Option<PathBuf>) -> Option<PathBuf> {
+fn resolve_codex_sessions_root(
+    codex_home_override: Option<PathBuf>,
+    settings: Option<&AppSettings>,
+) -> Option<PathBuf> {
     codex_home_override
-        .or_else(resolve_default_codex_home)
+        .or_else(|| resolve_default_codex_home_with_settings(settings))
         .map(|home| home.join("sessions"))
 }
 
 fn resolve_sessions_roots(
     workspaces: &HashMap<String, WorkspaceEntry>,
     workspace_path: Option<&Path>,
+    settings: Option<&AppSettings>,
 ) -> Vec<PathBuf> {
     if let Some(workspace_path) = workspace_path {
         let codex_home_override =
-            resolve_workspace_codex_home_for_path(workspaces, Some(workspace_path));
-        return resolve_codex_sessions_root(codex_home_override).into_iter().collect();
+            resolve_workspace_codex_home_for_path(workspaces, Some(workspace_path), settings);
+        return resolve_codex_sessions_root(codex_home_override, settings)
+            .into_iter()
+            .collect();
     }
 
     let mut roots = Vec::new();
     let mut seen = HashSet::new();
 
-    if let Some(root) = resolve_codex_sessions_root(None) {
+    if let Some(root) = resolve_codex_sessions_root(None, settings) {
         if seen.insert(root.clone()) {
             roots.push(root);
         }
@@ -542,10 +551,14 @@ fn resolve_sessions_roots(
             .parent_id
             .as_ref()
             .and_then(|parent_id| workspaces.get(parent_id));
-        let Some(codex_home) = resolve_workspace_codex_home(entry, parent_entry) else {
+        let Some(codex_home) = resolve_workspace_codex_home_with_settings(
+            entry,
+            parent_entry,
+            settings,
+        ) else {
             continue;
         };
-        if let Some(root) = resolve_codex_sessions_root(Some(codex_home)) {
+        if let Some(root) = resolve_codex_sessions_root(Some(codex_home), settings) {
             if seen.insert(root.clone()) {
                 roots.push(root);
             }
@@ -558,6 +571,7 @@ fn resolve_sessions_roots(
 fn resolve_workspace_codex_home_for_path(
     workspaces: &HashMap<String, crate::types::WorkspaceEntry>,
     workspace_path: Option<&Path>,
+    settings: Option<&AppSettings>,
 ) -> Option<PathBuf> {
     let workspace_path = workspace_path?;
     let entry = workspaces
@@ -573,7 +587,7 @@ fn resolve_workspace_codex_home_for_path(
         .as_ref()
         .and_then(|parent_id| workspaces.get(parent_id));
 
-    resolve_workspace_codex_home(entry, parent_entry)
+    resolve_workspace_codex_home_with_settings(entry, parent_entry, settings)
 }
 
 fn day_dir_for_key(root: &Path, day_key: &str) -> PathBuf {
@@ -843,7 +857,7 @@ mod tests {
         workspaces.insert(entry_a.id.clone(), entry_a.clone());
         workspaces.insert(entry_b.id.clone(), entry_b.clone());
 
-        let roots = resolve_sessions_roots(&workspaces, None);
+        let roots = resolve_sessions_roots(&workspaces, None, None);
         let expected_a = PathBuf::from(entry_a.settings.codex_home.unwrap()).join("sessions");
         let expected_b = PathBuf::from(entry_b.settings.codex_home.unwrap()).join("sessions");
 

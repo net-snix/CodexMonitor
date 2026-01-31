@@ -1,4 +1,6 @@
 use serde_json::{json, Map, Value};
+use std::fs;
+use std::path::Path;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::process::Stdio;
@@ -16,10 +18,15 @@ use tokio::process::Command;
 use crate::backend::app_server::{build_codex_command_with_bin, WorkspaceSession};
 use crate::codex::args::{apply_codex_args, resolve_workspace_codex_args};
 use crate::codex::config as codex_config;
-use crate::codex::home::{resolve_default_codex_home, resolve_workspace_codex_home};
+use crate::codex::home::{
+    normalize_codex_home, resolve_default_codex_home_with_settings,
+    resolve_workspace_codex_home_with_settings,
+};
 use crate::rules;
 use crate::shared::account::{build_account_response, read_auth_account};
 use crate::types::{AppSettings, WorkspaceEntry};
+
+const DEFAULT_PROFILE_ID: &str = "default";
 
 async fn get_session_clone(
     sessions: &Mutex<HashMap<String, Arc<WorkspaceSession>>>,
@@ -51,11 +58,13 @@ async fn resolve_workspace_and_parent(
 
 async fn resolve_codex_home_for_workspace_core(
     workspaces: &Mutex<HashMap<String, WorkspaceEntry>>,
+    app_settings: &Mutex<AppSettings>,
     workspace_id: &str,
 ) -> Result<PathBuf, String> {
     let (entry, parent_entry) = resolve_workspace_and_parent(workspaces, workspace_id).await?;
-    resolve_workspace_codex_home(&entry, parent_entry.as_ref())
-        .or_else(resolve_default_codex_home)
+    let settings = app_settings.lock().await.clone();
+    resolve_workspace_codex_home_with_settings(&entry, parent_entry.as_ref(), Some(&settings))
+        .or_else(|| resolve_default_codex_home_with_settings(Some(&settings)))
         .ok_or_else(|| "Unable to resolve CODEX_HOME".to_string())
 }
 
@@ -256,6 +265,7 @@ pub(crate) async fn account_rate_limits_core(
 pub(crate) async fn account_read_core(
     sessions: &Mutex<HashMap<String, Arc<WorkspaceSession>>>,
     workspaces: &Mutex<HashMap<String, WorkspaceEntry>>,
+    app_settings: &Mutex<AppSettings>,
     workspace_id: String,
 ) -> Result<Value, String> {
     let session = {
@@ -269,11 +279,104 @@ pub(crate) async fn account_read_core(
     };
 
     let (entry, parent_entry) = resolve_workspace_and_parent(workspaces, &workspace_id).await?;
-    let codex_home = resolve_workspace_codex_home(&entry, parent_entry.as_ref())
-        .or_else(resolve_default_codex_home);
+    let settings = app_settings.lock().await.clone();
+    let codex_home =
+        resolve_workspace_codex_home_with_settings(&entry, parent_entry.as_ref(), Some(&settings))
+            .or_else(|| resolve_default_codex_home_with_settings(Some(&settings)));
     let fallback = read_auth_account(codex_home);
 
     Ok(build_account_response(response, fallback))
+}
+
+pub(crate) async fn auth_store_read_core(
+    app_settings: &Mutex<AppSettings>,
+) -> Result<Value, String> {
+    let settings = app_settings.lock().await.clone();
+    let store = codex_config::read_auth_store_with_settings(Some(&settings))?;
+    Ok(json!({ "store": store }))
+}
+
+pub(crate) async fn auth_store_set_file_core(
+    app_settings: &Mutex<AppSettings>,
+) -> Result<Value, String> {
+    let settings = app_settings.lock().await.clone();
+    codex_config::write_auth_store_file_with_settings(Some(&settings))?;
+    Ok(json!({ "ok": true }))
+}
+
+pub(crate) async fn auth_profile_snapshot_core(
+    app_settings: &Mutex<AppSettings>,
+    profile_id: String,
+) -> Result<Value, String> {
+    let settings = app_settings.lock().await.clone();
+    let base_home = resolve_default_codex_home_with_settings(Some(&settings))
+        .ok_or_else(|| "Unable to resolve CODEX_HOME".to_string())?;
+    let profile_home = resolve_profile_storage_path(&settings, &profile_id)?;
+    let source = base_home.join("auth.json");
+    let target = profile_home.join("auth.json");
+    let copied = copy_auth_file(&source, &target)?;
+    Ok(json!({ "ok": true, "missing": !copied }))
+}
+
+pub(crate) async fn auth_profile_apply_core(
+    app_settings: &Mutex<AppSettings>,
+    profile_id: String,
+) -> Result<Value, String> {
+    let settings = app_settings.lock().await.clone();
+    let base_home = resolve_default_codex_home_with_settings(Some(&settings))
+        .ok_or_else(|| "Unable to resolve CODEX_HOME".to_string())?;
+    let profile_home = resolve_profile_storage_path(&settings, &profile_id)?;
+    let source = profile_home.join("auth.json");
+    let target = base_home.join("auth.json");
+    let copied = copy_auth_file(&source, &target)?;
+    Ok(json!({ "ok": true, "missing": !copied }))
+}
+
+fn resolve_profile_storage_path(
+    settings: &AppSettings,
+    profile_id: &str,
+) -> Result<PathBuf, String> {
+    let base_home = resolve_default_codex_home_with_settings(Some(settings))
+        .ok_or_else(|| "Unable to resolve CODEX_HOME".to_string())?;
+    if let Some(profile) = settings
+        .codex_profiles
+        .iter()
+        .find(|profile| profile.id == profile_id)
+    {
+        if let Some(path) = normalize_codex_home(&profile.codex_home) {
+            return Ok(if path.is_absolute() {
+                path
+            } else {
+                base_home.join(path)
+            });
+        }
+    }
+    let slug = if profile_id.trim().is_empty() {
+        DEFAULT_PROFILE_ID
+    } else {
+        profile_id.trim()
+    };
+    Ok(base_home.join("profiles").join(slug))
+}
+
+fn copy_auth_file(source: &Path, target: &Path) -> Result<bool, String> {
+    if !source.is_file() {
+        return Ok(false);
+    }
+    if let Some(parent) = target.parent() {
+        fs::create_dir_all(parent).map_err(|err| err.to_string())?;
+    }
+    fs::copy(source, target).map_err(|err| err.to_string())?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if let Ok(metadata) = fs::metadata(target) {
+            let mut perms = metadata.permissions();
+            perms.set_mode(0o600);
+            let _ = fs::set_permissions(target, perms);
+        }
+    }
+    Ok(true)
 }
 
 pub(crate) async fn codex_login_core(
@@ -303,8 +406,9 @@ pub(crate) async fn codex_login_core(
         .filter(|value| !value.trim().is_empty())
         .or(settings.codex_bin.clone());
     let codex_args = resolve_workspace_codex_args(&entry, parent_entry.as_ref(), Some(&settings));
-    let codex_home = resolve_workspace_codex_home(&entry, parent_entry.as_ref())
-        .or_else(resolve_default_codex_home);
+    let codex_home =
+        resolve_workspace_codex_home_with_settings(&entry, parent_entry.as_ref(), Some(&settings))
+            .or_else(|| resolve_default_codex_home_with_settings(Some(&settings)));
 
     let mut command = build_codex_command_with_bin(codex_bin);
     if let Some(ref codex_home) = codex_home {
@@ -461,6 +565,7 @@ pub(crate) async fn respond_to_server_request_core(
 
 pub(crate) async fn remember_approval_rule_core(
     workspaces: &Mutex<HashMap<String, WorkspaceEntry>>,
+    app_settings: &Mutex<AppSettings>,
     workspace_id: String,
     command: Vec<String>,
 ) -> Result<Value, String> {
@@ -473,7 +578,8 @@ pub(crate) async fn remember_approval_rule_core(
         return Err("empty command".to_string());
     }
 
-    let codex_home = resolve_codex_home_for_workspace_core(workspaces, &workspace_id).await?;
+    let codex_home =
+        resolve_codex_home_for_workspace_core(workspaces, app_settings, &workspace_id).await?;
     let rules_path = rules::default_rules_path(&codex_home);
     rules::append_prefix_rule(&rules_path, &command)?;
 
@@ -485,9 +591,11 @@ pub(crate) async fn remember_approval_rule_core(
 
 pub(crate) async fn get_config_model_core(
     workspaces: &Mutex<HashMap<String, WorkspaceEntry>>,
+    app_settings: &Mutex<AppSettings>,
     workspace_id: String,
 ) -> Result<Value, String> {
-    let codex_home = resolve_codex_home_for_workspace_core(workspaces, &workspace_id).await?;
+    let codex_home =
+        resolve_codex_home_for_workspace_core(workspaces, app_settings, &workspace_id).await?;
     let model = codex_config::read_config_model(Some(codex_home))?;
     Ok(json!({ "model": model }))
 }

@@ -5,9 +5,11 @@ use std::path::{Path, PathBuf};
 use tokio::task;
 use tauri::State;
 
-use crate::codex::home::{resolve_default_codex_home, resolve_workspace_codex_home};
+use crate::codex::home::{
+    resolve_default_codex_home_with_settings, resolve_workspace_codex_home_with_settings,
+};
 use crate::state::AppState;
-use crate::types::WorkspaceEntry;
+use crate::types::{AppSettings, WorkspaceEntry};
 
 #[derive(Serialize, Clone)]
 pub(crate) struct CustomPromptEntry {
@@ -24,19 +26,22 @@ pub(crate) struct CustomPromptEntry {
 fn resolve_codex_home_for_workspace(
     workspaces: &HashMap<String, WorkspaceEntry>,
     entry: &WorkspaceEntry,
+    settings: &AppSettings,
 ) -> Option<PathBuf> {
     let parent_entry = entry
         .parent_id
         .as_ref()
         .and_then(|parent_id| workspaces.get(parent_id));
-    resolve_workspace_codex_home(entry, parent_entry).or_else(resolve_default_codex_home)
+    resolve_workspace_codex_home_with_settings(entry, parent_entry, Some(settings))
+        .or_else(|| resolve_default_codex_home_with_settings(Some(settings)))
 }
 
 fn default_prompts_dir_for_workspace(
     workspaces: &HashMap<String, WorkspaceEntry>,
     entry: &WorkspaceEntry,
+    settings: &AppSettings,
 ) -> Option<PathBuf> {
-    resolve_codex_home_for_workspace(workspaces, entry).map(|home| home.join("prompts"))
+    resolve_codex_home_for_workspace(workspaces, entry, settings).map(|home| home.join("prompts"))
 }
 
 fn require_workspace_entry(
@@ -72,10 +77,11 @@ fn prompt_roots_for_workspace(
     state: &State<'_, AppState>,
     workspaces: &HashMap<String, WorkspaceEntry>,
     entry: &WorkspaceEntry,
+    settings: &AppSettings,
 ) -> Result<Vec<PathBuf>, String> {
     let mut roots = Vec::new();
     roots.push(workspace_prompts_dir(state, entry)?);
-    if let Some(global_dir) = default_prompts_dir_for_workspace(workspaces, entry) {
+    if let Some(global_dir) = default_prompts_dir_for_workspace(workspaces, entry, settings) {
         roots.push(global_dir);
     }
     Ok(roots)
@@ -278,6 +284,7 @@ pub(crate) async fn prompts_list(
     workspace_id: String,
 ) -> Result<Vec<CustomPromptEntry>, String> {
     let (workspace_dir, global_dir) = {
+        let settings = state.app_settings.lock().await.clone();
         let workspaces = state.workspaces.lock().await;
         let entry = workspaces.get(&workspace_id).cloned();
         let workspace_dir = entry
@@ -285,7 +292,7 @@ pub(crate) async fn prompts_list(
             .and_then(|entry| workspace_prompts_dir(&state, entry).ok());
         let global_dir = entry
             .as_ref()
-            .and_then(|entry| default_prompts_dir_for_workspace(&workspaces, entry));
+            .and_then(|entry| default_prompts_dir_for_workspace(&workspaces, entry, &settings));
         (workspace_dir, global_dir)
     };
 
@@ -324,9 +331,10 @@ pub(crate) async fn prompts_global_dir(
     state: State<'_, AppState>,
     workspace_id: String,
 ) -> Result<String, String> {
+    let settings = state.app_settings.lock().await.clone();
     let workspaces = state.workspaces.lock().await;
     let entry = require_workspace_entry(&workspaces, &workspace_id)?;
-    let dir = default_prompts_dir_for_workspace(&workspaces, &entry)
+    let dir = default_prompts_dir_for_workspace(&workspaces, &entry, &settings)
         .ok_or("Unable to resolve CODEX_HOME".to_string())?;
     fs::create_dir_all(&dir).map_err(|err| err.to_string())?;
     Ok(dir.to_string_lossy().to_string())
@@ -343,6 +351,7 @@ pub(crate) async fn prompts_create(
     content: String,
 ) -> Result<CustomPromptEntry, String> {
     let name = sanitize_prompt_name(&name)?;
+    let settings = state.app_settings.lock().await.clone();
     let (target_dir, resolved_scope) = {
         let workspaces = state.workspaces.lock().await;
         let entry = require_workspace_entry(&workspaces, &workspace_id)?;
@@ -352,7 +361,7 @@ pub(crate) async fn prompts_create(
                 (dir, "workspace")
             }
             "global" => {
-                let dir = default_prompts_dir_for_workspace(&workspaces, &entry)
+                let dir = default_prompts_dir_for_workspace(&workspaces, &entry, &settings)
                     .ok_or("Unable to resolve CODEX_HOME".to_string())?;
                 (dir, "global")
             }
@@ -389,6 +398,7 @@ pub(crate) async fn prompts_update(
     content: String,
 ) -> Result<CustomPromptEntry, String> {
     let name = sanitize_prompt_name(&name)?;
+    let settings = state.app_settings.lock().await.clone();
     let target_path = PathBuf::from(&path);
     if !target_path.exists() {
         return Err("Prompt not found.".to_string());
@@ -396,7 +406,7 @@ pub(crate) async fn prompts_update(
     {
         let workspaces = state.workspaces.lock().await;
         let entry = require_workspace_entry(&workspaces, &workspace_id)?;
-        let roots = prompt_roots_for_workspace(&state, &workspaces, &entry)?;
+        let roots = prompt_roots_for_workspace(&state, &workspaces, &entry, &settings)?;
         ensure_path_within_roots(&target_path, &roots)?;
     }
     let dir = target_path
@@ -437,6 +447,7 @@ pub(crate) async fn prompts_delete(
     workspace_id: String,
     path: String,
 ) -> Result<(), String> {
+    let settings = state.app_settings.lock().await.clone();
     let target = PathBuf::from(path);
     if !target.exists() {
         return Ok(());
@@ -444,7 +455,7 @@ pub(crate) async fn prompts_delete(
     {
         let workspaces = state.workspaces.lock().await;
         let entry = require_workspace_entry(&workspaces, &workspace_id)?;
-        let roots = prompt_roots_for_workspace(&state, &workspaces, &entry)?;
+        let roots = prompt_roots_for_workspace(&state, &workspaces, &entry, &settings)?;
         ensure_path_within_roots(&target, &roots)?;
     }
     fs::remove_file(&target).map_err(|err| err.to_string())
@@ -457,6 +468,7 @@ pub(crate) async fn prompts_move(
     path: String,
     scope: String,
 ) -> Result<CustomPromptEntry, String> {
+    let settings = state.app_settings.lock().await.clone();
     let target_path = PathBuf::from(&path);
     if !target_path.exists() {
         return Err("Prompt not found.".to_string());
@@ -464,7 +476,7 @@ pub(crate) async fn prompts_move(
     let roots = {
         let workspaces = state.workspaces.lock().await;
         let entry = require_workspace_entry(&workspaces, &workspace_id)?;
-        prompt_roots_for_workspace(&state, &workspaces, &entry)?
+        prompt_roots_for_workspace(&state, &workspaces, &entry, &settings)?
     };
     ensure_path_within_roots(&target_path, &roots)?;
     let file_name = target_path
@@ -476,7 +488,7 @@ pub(crate) async fn prompts_move(
         let entry = require_workspace_entry(&workspaces, &workspace_id)?;
         match scope.as_str() {
             "workspace" => workspace_prompts_dir(&state, &entry)?,
-            "global" => default_prompts_dir_for_workspace(&workspaces, &entry)
+            "global" => default_prompts_dir_for_workspace(&workspaces, &entry, &settings)
                 .ok_or("Unable to resolve CODEX_HOME".to_string())?,
             _ => return Err("Invalid scope.".to_string()),
         }

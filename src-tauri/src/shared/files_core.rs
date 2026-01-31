@@ -7,10 +7,13 @@ use crate::codex::home as codex_home;
 use crate::files::io::TextFileResponse;
 use crate::files::ops::{read_with_policy, write_with_policy};
 use crate::files::policy::{policy_for, FileKind, FileScope};
-use crate::types::WorkspaceEntry;
+use crate::types::{AppSettings, WorkspaceEntry};
 
-fn resolve_default_codex_home() -> Result<PathBuf, String> {
-    codex_home::resolve_default_codex_home()
+async fn resolve_default_codex_home(
+    app_settings: &Mutex<AppSettings>,
+) -> Result<PathBuf, String> {
+    let settings = app_settings.lock().await;
+    codex_home::resolve_default_codex_home_with_settings(Some(&settings))
         .ok_or_else(|| "Unable to resolve CODEX_HOME".to_string())
 }
 
@@ -27,11 +30,12 @@ async fn resolve_workspace_root(
 
 pub(crate) async fn resolve_root_core(
     workspaces: &Mutex<HashMap<String, WorkspaceEntry>>,
+    app_settings: &Mutex<AppSettings>,
     scope: FileScope,
     workspace_id: Option<&str>,
 ) -> Result<PathBuf, String> {
     match scope {
-        FileScope::Global => resolve_default_codex_home(),
+        FileScope::Global => resolve_default_codex_home(app_settings).await,
         FileScope::Workspace => {
             let workspace_id =
                 workspace_id.ok_or_else(|| "workspaceId is required".to_string())?;
@@ -42,23 +46,25 @@ pub(crate) async fn resolve_root_core(
 
 pub(crate) async fn file_read_core(
     workspaces: &Mutex<HashMap<String, WorkspaceEntry>>,
+    app_settings: &Mutex<AppSettings>,
     scope: FileScope,
     kind: FileKind,
     workspace_id: Option<String>,
 ) -> Result<TextFileResponse, String> {
     let policy = policy_for(scope, kind)?;
-    let root = resolve_root_core(workspaces, scope, workspace_id.as_deref()).await?;
+    let root = resolve_root_core(workspaces, app_settings, scope, workspace_id.as_deref()).await?;
     read_with_policy(&root, policy)
 }
 
 pub(crate) async fn file_write_core(
     workspaces: &Mutex<HashMap<String, WorkspaceEntry>>,
+    app_settings: &Mutex<AppSettings>,
     scope: FileScope,
     kind: FileKind,
     workspace_id: Option<String>,
     content: String,
 ) -> Result<(), String> {
     let policy = policy_for(scope, kind)?;
-    let root = resolve_root_core(workspaces, scope, workspace_id.as_deref()).await?;
+    let root = resolve_root_core(workspaces, app_settings, scope, workspace_id.as_deref()).await?;
     write_with_policy(&root, policy, &content)
 }

@@ -127,6 +127,12 @@ describe("useThreadActions", () => {
     vi.mocked(forkThread).mockResolvedValue({
       result: { thread: { id: "thread-fork-1" } },
     });
+    vi.mocked(resumeThread).mockResolvedValue({
+      result: { thread: { id: "thread-fork-1", preview: "", updated_at: 0, turns: [] } },
+    });
+    vi.mocked(buildItemsFromThread).mockReturnValue([]);
+    vi.mocked(getThreadTimestamp).mockReturnValue(0);
+    vi.mocked(isReviewingFromThread).mockReturnValue(false);
 
     const { result, dispatch, loadedThreadsRef } = renderActions();
 

@@ -3,6 +3,7 @@ import type { Dispatch, MutableRefObject } from "react";
 import * as Sentry from "@sentry/react";
 import type {
   AccessMode,
+  AccountSnapshot,
   RateLimitSnapshot,
   CustomPromptOption,
   DebugEntry,
@@ -10,6 +11,7 @@ import type {
   WorkspaceInfo,
 } from "../../../types";
 import {
+  getAccountInfo,
   sendUserMessage as sendUserMessageService,
   startReview as startReviewService,
   interruptTurn as interruptTurnService,
@@ -24,6 +26,33 @@ import {
 import type { ThreadAction, ThreadState } from "./useThreadsReducer";
 import { useReviewPrompt } from "./useReviewPrompt";
 import { formatRelativeTime } from "../../../utils/time";
+
+function normalizeAccountSnapshot(
+  response: Record<string, unknown> | null,
+): AccountSnapshot | null {
+  const accountValue =
+    (response?.result as Record<string, unknown> | undefined)?.account ??
+    response?.account;
+  const account =
+    accountValue && typeof accountValue === "object"
+      ? (accountValue as Record<string, unknown>)
+      : null;
+  if (!account) {
+    return null;
+  }
+  const typeRaw =
+    typeof account.type === "string" ? account.type.toLowerCase() : "unknown";
+  const type = typeRaw === "chatgpt" || typeRaw === "apikey" ? typeRaw : "unknown";
+  const emailRaw = typeof account.email === "string" ? account.email.trim() : "";
+  const planRaw =
+    typeof account.planType === "string" ? account.planType.trim() : "";
+  return {
+    type,
+    email: emailRaw ? emailRaw : null,
+    planType: planRaw ? planRaw : null,
+    requiresOpenaiAuth: null,
+  };
+}
 
 type SendMessageOptions = {
   skipPromptExpansion?: boolean;
@@ -560,12 +589,30 @@ export function useThreadMessaging({
           ? String(collaborationMode.settings.id ?? "")
           : "";
 
+      let accountLine = "- Account: unknown";
+      try {
+        const response = (await getAccountInfo(
+          activeWorkspace.id,
+        )) as Record<string, unknown> | null;
+        const account = normalizeAccountSnapshot(response);
+        if (account) {
+          const baseLabel =
+            account.email ??
+            (account.type === "apikey" ? "API key" : "unknown");
+          const suffix = account.planType ? ` (${account.planType})` : "";
+          accountLine = `- Account: ${baseLabel}${suffix}`;
+        }
+      } catch {
+        // Ignore account read failures for status output.
+      }
+
       const lines = [
         "Session status:",
         `- Model: ${model ?? "default"}`,
         `- Reasoning effort: ${effort ?? "default"}`,
         `- Access: ${accessMode ?? "current"}`,
         `- Collaboration: ${collabId || "off"}`,
+        accountLine,
       ];
 
       if (typeof primaryUsed === "number") {

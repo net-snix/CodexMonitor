@@ -442,7 +442,75 @@ pub(crate) async fn account_read(
         .await;
     }
 
-    codex_core::account_read_core(&state.sessions, &state.workspaces, workspace_id).await
+    codex_core::account_read_core(
+        &state.sessions,
+        &state.workspaces,
+        &state.app_settings,
+        workspace_id,
+    )
+    .await
+}
+
+#[tauri::command]
+pub(crate) async fn codex_auth_store_read(
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<Value, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return remote_backend::call_remote(&*state, app, "codex_auth_store_read", json!({})).await;
+    }
+
+    codex_core::auth_store_read_core(&state.app_settings).await
+}
+
+#[tauri::command]
+pub(crate) async fn codex_auth_store_set_file(
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<Value, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return remote_backend::call_remote(&*state, app, "codex_auth_store_set_file", json!({})).await;
+    }
+
+    codex_core::auth_store_set_file_core(&state.app_settings).await
+}
+
+#[tauri::command]
+pub(crate) async fn codex_auth_profile_snapshot(
+    profile_id: String,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<Value, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return remote_backend::call_remote(
+            &*state,
+            app,
+            "codex_auth_profile_snapshot",
+            json!({ "profileId": profile_id }),
+        )
+        .await;
+    }
+
+    codex_core::auth_profile_snapshot_core(&state.app_settings, profile_id).await
+}
+
+#[tauri::command]
+pub(crate) async fn codex_auth_profile_apply(
+    profile_id: String,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<Value, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return remote_backend::call_remote(
+            &*state,
+            app,
+            "codex_auth_profile_apply",
+            json!({ "profileId": profile_id }),
+        )
+        .await;
+    }
+
+    codex_core::auth_profile_apply_core(&state.app_settings, profile_id).await
 }
 
 #[tauri::command]
@@ -561,7 +629,13 @@ pub(crate) async fn remember_approval_rule(
     command: Vec<String>,
     state: State<'_, AppState>,
 ) -> Result<Value, String> {
-    codex_core::remember_approval_rule_core(&state.workspaces, workspace_id, command).await
+    codex_core::remember_approval_rule_core(
+        &state.workspaces,
+        &state.app_settings,
+        workspace_id,
+        command,
+    )
+    .await
 }
 
 #[tauri::command]
@@ -580,7 +654,7 @@ pub(crate) async fn get_config_model(
         .await;
     }
 
-    codex_core::get_config_model_core(&state.workspaces, workspace_id).await
+    codex_core::get_config_model_core(&state.workspaces, &state.app_settings, workspace_id).await
 }
 
 /// Generates a commit message in the background without showing in the main chat

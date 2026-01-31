@@ -19,6 +19,7 @@ import { TabletNav } from "../../app/components/TabletNav";
 import { TerminalDock } from "../../terminal/components/TerminalDock";
 import { TerminalPanel } from "../../terminal/components/TerminalPanel";
 import type { ReviewPromptState, ReviewPromptStep } from "../../threads/hooks/useReviewPrompt";
+import type { AccountSwitcherState } from "../../app/hooks/useAccountProfiles";
 import type {
   AccessMode,
   ApprovalRequest,
@@ -27,7 +28,6 @@ import type {
   ConversationItem,
   ComposerEditorSettings,
   CustomPromptOption,
-  AccountSnapshot,
   DebugEntry,
   DictationSessionState,
   DictationTranscript,
@@ -112,10 +112,7 @@ type LayoutNodesOptions = {
   activeItems: ConversationItem[];
   activeRateLimits: RateLimitSnapshot | null;
   usageShowRemaining: boolean;
-  accountInfo: AccountSnapshot | null;
-  onSwitchAccount: () => void;
-  onCancelSwitchAccount: () => void;
-  accountSwitching: boolean;
+  accountSwitcher: AccountSwitcherState;
   codeBlockCopyUseModifier: boolean;
   openAppTargets: OpenAppTarget[];
   openAppIconById: Record<string, string>;
@@ -468,10 +465,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       activeThreadId={options.activeThreadId}
       accountRateLimits={options.activeRateLimits}
       usageShowRemaining={options.usageShowRemaining}
-      accountInfo={options.accountInfo}
-      onSwitchAccount={options.onSwitchAccount}
-      onCancelSwitchAccount={options.onCancelSwitchAccount}
-      accountSwitching={options.accountSwitching}
+      accountSwitcher={options.accountSwitcher}
       onOpenSettings={options.onOpenSettings}
       onOpenDebug={options.onOpenDebug}
       showDebugButton={options.showDebugButton}

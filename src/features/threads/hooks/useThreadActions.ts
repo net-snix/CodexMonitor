@@ -156,67 +156,69 @@ export function useThreadActions({
         const thread = (result?.thread ?? response?.thread ?? null) as
           | Record<string, unknown>
           | null;
-        if (thread) {
-          dispatch({ type: "ensureThread", workspaceId, threadId });
-          applyCollabThreadLinksFromThread(threadId, thread);
-          const items = buildItemsFromThread(thread);
-          const localItems = itemsByThread[threadId] ?? [];
-          const shouldReplace =
-            replaceLocal || replaceOnResumeRef.current[threadId] === true;
-          if (shouldReplace) {
-            replaceOnResumeRef.current[threadId] = false;
-          }
-          if (localItems.length > 0 && !shouldReplace) {
-            loadedThreadsRef.current[threadId] = true;
-            return threadId;
-          }
-          const hasOverlap =
-            items.length > 0 &&
-            localItems.length > 0 &&
-            items.some((item) => localItems.some((local) => local.id === item.id));
-          const mergedItems =
-            items.length > 0
-              ? shouldReplace
-                ? items
-                : localItems.length > 0 && !hasOverlap
-                  ? localItems
-                  : mergeThreadItems(items, localItems)
-              : localItems;
-          if (mergedItems.length > 0) {
-            dispatch({ type: "setThreadItems", threadId, items: mergedItems });
-          }
+        if (!thread) {
+          loadedThreadsRef.current[threadId] = false;
+          return null;
+        }
+        dispatch({ type: "ensureThread", workspaceId, threadId });
+        applyCollabThreadLinksFromThread(threadId, thread);
+        const items = buildItemsFromThread(thread);
+        const localItems = itemsByThread[threadId] ?? [];
+        const shouldReplace =
+          replaceLocal || replaceOnResumeRef.current[threadId] === true;
+        if (shouldReplace) {
+          replaceOnResumeRef.current[threadId] = false;
+        }
+        if (localItems.length > 0 && !shouldReplace) {
+          loadedThreadsRef.current[threadId] = true;
+          return threadId;
+        }
+        const hasOverlap =
+          items.length > 0 &&
+          localItems.length > 0 &&
+          items.some((item) => localItems.some((local) => local.id === item.id));
+        const mergedItems =
+          items.length > 0
+            ? shouldReplace
+              ? items
+              : localItems.length > 0 && !hasOverlap
+                ? localItems
+                : mergeThreadItems(items, localItems)
+            : localItems;
+        if (mergedItems.length > 0) {
+          dispatch({ type: "setThreadItems", threadId, items: mergedItems });
+        }
+        dispatch({
+          type: "markReviewing",
+          threadId,
+          isReviewing: isReviewingFromThread(thread),
+        });
+        const preview = asString(thread?.preview ?? "");
+        const customName = getCustomName(workspaceId, threadId);
+        if (!customName && preview) {
           dispatch({
-            type: "markReviewing",
+            type: "setThreadName",
+            workspaceId,
             threadId,
-            isReviewing: isReviewingFromThread(thread),
+            name: previewThreadName(preview, `Agent ${threadId.slice(0, 4)}`),
           });
-          const preview = asString(thread?.preview ?? "");
-          const customName = getCustomName(workspaceId, threadId);
-          if (!customName && preview) {
-            dispatch({
-              type: "setThreadName",
-              workspaceId,
-              threadId,
-              name: previewThreadName(preview, `Agent ${threadId.slice(0, 4)}`),
-            });
-          }
-          const lastAgentMessage = [...mergedItems]
-            .reverse()
-            .find(
-              (item) => item.kind === "message" && item.role === "assistant",
-            ) as ConversationItem | undefined;
-          const lastText =
-            lastAgentMessage && lastAgentMessage.kind === "message"
-              ? lastAgentMessage.text
-              : preview;
-          if (lastText) {
-            dispatch({
-              type: "setLastAgentMessage",
-              threadId,
-              text: lastText,
-              timestamp: getThreadTimestamp(thread),
-            });
-          }
+        }
+        const lastAgentMessage = [...mergedItems]
+          .reverse()
+          .find(
+            (item) => item.kind === "message" && item.role === "assistant",
+          ) as ConversationItem | undefined;
+        const lastText =
+          lastAgentMessage && lastAgentMessage.kind === "message"
+            ? lastAgentMessage.text
+            : preview;
+        if (lastText) {
+          dispatch({
+            type: "setLastAgentMessage",
+            threadId,
+            text: lastText,
+            timestamp: getThreadTimestamp(thread),
+          });
         }
         loadedThreadsRef.current[threadId] = true;
         return threadId;
@@ -228,6 +230,7 @@ export function useThreadActions({
           label: "thread/resume error",
           payload: error instanceof Error ? error.message : String(error),
         });
+        loadedThreadsRef.current[threadId] = false;
         return null;
       }
     },
@@ -317,6 +320,7 @@ export function useThreadActions({
     },
     [activeThreadIdByWorkspace, loadedThreadsRef, threadsByWorkspace],
   );
+
 
   const listThreadsForWorkspace = useCallback(
     async (

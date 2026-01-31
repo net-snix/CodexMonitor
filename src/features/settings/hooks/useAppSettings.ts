@@ -22,6 +22,8 @@ const allowedThemes = new Set(["system", "light", "dark", "dim"]);
 const defaultSettings: AppSettings = {
   codexBin: null,
   codexArgs: null,
+  codexProfiles: [],
+  activeCodexProfileId: null,
   backendMode: "local",
   remoteBackendHost: "127.0.0.1:4732",
   remoteBackendToken: null,
@@ -48,6 +50,7 @@ const defaultSettings: AppSettings = {
   uiScale: UI_SCALE_DEFAULT,
   theme: "system",
   usageShowRemaining: false,
+  autoSwitchOnLimit: false,
   uiFontFamily: DEFAULT_UI_FONT_FAMILY,
   codeFontFamily: DEFAULT_CODE_FONT_FAMILY,
   codeFontSize: CODE_FONT_SIZE_DEFAULT,

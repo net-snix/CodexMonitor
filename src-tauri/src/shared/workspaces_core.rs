@@ -7,7 +7,7 @@ use tokio::sync::Mutex;
 
 use crate::backend::app_server::WorkspaceSession;
 use crate::codex::args::resolve_workspace_codex_args;
-use crate::codex::home::resolve_workspace_codex_home;
+use crate::codex::home::resolve_workspace_codex_home_with_settings;
 use crate::storage::write_workspaces;
 use crate::types::{
     AppSettings, WorkspaceEntry, WorkspaceInfo, WorkspaceKind, WorkspaceSettings, WorktreeInfo,
@@ -175,14 +175,10 @@ where
         settings: WorkspaceSettings::default(),
     };
 
-    let (default_bin, codex_args) = {
-        let settings = app_settings.lock().await;
-        (
-            settings.codex_bin.clone(),
-            resolve_workspace_codex_args(&entry, None, Some(&settings)),
-        )
-    };
-    let codex_home = resolve_workspace_codex_home(&entry, None);
+    let settings = app_settings.lock().await.clone();
+    let default_bin = settings.codex_bin.clone();
+    let codex_args = resolve_workspace_codex_args(&entry, None, Some(&settings));
+    let codex_home = resolve_workspace_codex_home_with_settings(&entry, None, Some(&settings));
     let session = spawn_session(entry.clone(), default_bin, codex_args, codex_home).await?;
 
     if let Err(error) = {
@@ -349,14 +345,11 @@ where
         },
     };
 
-    let (default_bin, codex_args) = {
-        let settings = app_settings.lock().await;
-        (
-            settings.codex_bin.clone(),
-            resolve_workspace_codex_args(&entry, Some(&parent_entry), Some(&settings)),
-        )
-    };
-    let codex_home = resolve_workspace_codex_home(&entry, Some(&parent_entry));
+    let settings = app_settings.lock().await.clone();
+    let default_bin = settings.codex_bin.clone();
+    let codex_args = resolve_workspace_codex_args(&entry, Some(&parent_entry), Some(&settings));
+    let codex_home =
+        resolve_workspace_codex_home_with_settings(&entry, Some(&parent_entry), Some(&settings));
     let session = spawn_session(entry.clone(), default_bin, codex_args, codex_home).await?;
 
     {
@@ -393,14 +386,11 @@ where
     Fut: Future<Output = Result<Arc<WorkspaceSession>, String>>,
 {
     let (entry, parent_entry) = resolve_entry_and_parent(workspaces, &workspace_id).await?;
-    let (default_bin, codex_args) = {
-        let settings = app_settings.lock().await;
-        (
-            settings.codex_bin.clone(),
-            resolve_workspace_codex_args(&entry, parent_entry.as_ref(), Some(&settings)),
-        )
-    };
-    let codex_home = resolve_workspace_codex_home(&entry, parent_entry.as_ref());
+    let settings = app_settings.lock().await.clone();
+    let default_bin = settings.codex_bin.clone();
+    let codex_args = resolve_workspace_codex_args(&entry, parent_entry.as_ref(), Some(&settings));
+    let codex_home =
+        resolve_workspace_codex_home_with_settings(&entry, parent_entry.as_ref(), Some(&settings));
     let session = spawn_session(entry.clone(), default_bin, codex_args, codex_home).await?;
     sessions.lock().await.insert(entry.id, session);
     Ok(())
@@ -718,14 +708,15 @@ where
     let was_connected = sessions.lock().await.contains_key(&entry_snapshot.id);
     if was_connected {
         kill_session_by_id(sessions, &entry_snapshot.id).await;
-        let (default_bin, codex_args) = {
-            let settings = app_settings.lock().await;
-            (
-                settings.codex_bin.clone(),
-                resolve_workspace_codex_args(&entry_snapshot, Some(&parent), Some(&settings)),
-            )
-        };
-        let codex_home = resolve_workspace_codex_home(&entry_snapshot, Some(&parent));
+        let settings = app_settings.lock().await.clone();
+        let default_bin = settings.codex_bin.clone();
+        let codex_args =
+            resolve_workspace_codex_args(&entry_snapshot, Some(&parent), Some(&settings));
+        let codex_home = resolve_workspace_codex_home_with_settings(
+            &entry_snapshot,
+            Some(&parent),
+            Some(&settings),
+        );
         match spawn_session(entry_snapshot.clone(), default_bin, codex_args, codex_home).await {
             Ok(session) => {
                 sessions
@@ -936,14 +927,15 @@ where
     let connected = sessions.lock().await.contains_key(&id);
     if connected && (codex_home_changed || codex_args_changed) {
         let rollback_entry = previous_entry.clone();
-        let (default_bin, codex_args) = {
-            let settings = app_settings.lock().await;
-            (
-                settings.codex_bin.clone(),
-                resolve_workspace_codex_args(&entry_snapshot, parent_entry.as_ref(), Some(&settings)),
-            )
-        };
-        let codex_home = resolve_workspace_codex_home(&entry_snapshot, parent_entry.as_ref());
+        let settings = app_settings.lock().await.clone();
+        let default_bin = settings.codex_bin.clone();
+        let codex_args =
+            resolve_workspace_codex_args(&entry_snapshot, parent_entry.as_ref(), Some(&settings));
+        let codex_home = resolve_workspace_codex_home_with_settings(
+            &entry_snapshot,
+            parent_entry.as_ref(),
+            Some(&settings),
+        );
         let new_session =
             match spawn_session(entry_snapshot.clone(), default_bin, codex_args, codex_home).await
             {
@@ -971,8 +963,16 @@ where
             if !connected {
                 continue;
             }
-            let previous_child_home = resolve_workspace_codex_home(child, Some(&previous_entry));
-            let next_child_home = resolve_workspace_codex_home(child, Some(&entry_snapshot));
+            let previous_child_home = resolve_workspace_codex_home_with_settings(
+                child,
+                Some(&previous_entry),
+                Some(&app_settings_snapshot),
+            );
+            let next_child_home = resolve_workspace_codex_home_with_settings(
+                child,
+                Some(&entry_snapshot),
+                Some(&app_settings_snapshot),
+            );
             let previous_child_args =
                 resolve_workspace_codex_args(child, Some(&previous_entry), Some(&app_settings_snapshot));
             let next_child_args =
@@ -1038,6 +1038,139 @@ where
         worktree: entry_snapshot.worktree,
         settings: entry_snapshot.settings,
     })
+}
+
+pub(crate) async fn respawn_sessions_for_app_settings_change_core<FSpawn, FutSpawn>(
+    workspaces: &Mutex<HashMap<String, WorkspaceEntry>>,
+    sessions: &Mutex<HashMap<String, Arc<WorkspaceSession>>>,
+    previous_settings: &AppSettings,
+    next_settings: &AppSettings,
+    spawn_session: FSpawn,
+) -> Result<(), String>
+where
+    FSpawn: Fn(WorkspaceEntry, Option<String>, Option<String>, Option<PathBuf>) -> FutSpawn,
+    FutSpawn: Future<Output = Result<Arc<WorkspaceSession>, String>>,
+{
+    let entries = {
+        let workspaces = workspaces.lock().await;
+        workspaces.values().cloned().collect::<Vec<_>>()
+    };
+    if entries.is_empty() {
+        return Ok(());
+    }
+
+    let default_bin = next_settings.codex_bin.clone();
+    for entry in &entries {
+        let entry = entry.clone();
+        let parent_entry = entry.parent_id.as_ref().and_then(|parent_id| {
+            entries
+                .iter()
+                .find(|candidate| candidate.id == *parent_id)
+                .cloned()
+        });
+        let prev_home = resolve_workspace_codex_home_with_settings(
+            &entry,
+            parent_entry.as_ref(),
+            Some(previous_settings),
+        );
+        let next_home = resolve_workspace_codex_home_with_settings(
+            &entry,
+            parent_entry.as_ref(),
+            Some(next_settings),
+        );
+        let prev_args =
+            resolve_workspace_codex_args(&entry, parent_entry.as_ref(), Some(previous_settings));
+        let next_args =
+            resolve_workspace_codex_args(&entry, parent_entry.as_ref(), Some(next_settings));
+        if prev_home == next_home && prev_args == next_args {
+            continue;
+        }
+        let connected = sessions.lock().await.contains_key(&entry.id);
+        if !connected {
+            continue;
+        }
+        let new_session =
+            match spawn_session(entry.clone(), default_bin.clone(), next_args, next_home).await {
+                Ok(session) => session,
+                Err(error) => {
+                    eprintln!(
+                        "update_app_settings: respawn failed for workspace {}: {error}",
+                        entry.id
+                    );
+                    continue;
+                }
+            };
+        if let Some(old_session) = sessions.lock().await.insert(entry.id.clone(), new_session) {
+            let mut child = old_session.child.lock().await;
+            let _ = child.kill().await;
+        }
+    }
+
+    Ok(())
+}
+
+pub(crate) async fn respawn_sessions_core<FSpawn, FutSpawn>(
+    workspaces: &Mutex<HashMap<String, WorkspaceEntry>>,
+    sessions: &Mutex<HashMap<String, Arc<WorkspaceSession>>>,
+    app_settings: &Mutex<AppSettings>,
+    spawn_session: FSpawn,
+) -> Result<(), String>
+where
+    FSpawn: Fn(WorkspaceEntry, Option<String>, Option<String>, Option<PathBuf>) -> FutSpawn,
+    FutSpawn: Future<Output = Result<Arc<WorkspaceSession>, String>>,
+{
+    let entries = {
+        let workspaces = workspaces.lock().await;
+        workspaces.values().cloned().collect::<Vec<_>>()
+    };
+    if entries.is_empty() {
+        return Ok(());
+    }
+
+    let settings = app_settings.lock().await.clone();
+    let default_bin = settings.codex_bin.clone();
+    for entry in entries.iter().cloned() {
+        let parent_entry = entry.parent_id.as_ref().and_then(|parent_id| {
+            entries
+                .iter()
+                .find(|candidate| candidate.id == *parent_id)
+                .cloned()
+        });
+        let codex_home = resolve_workspace_codex_home_with_settings(
+            &entry,
+            parent_entry.as_ref(),
+            Some(&settings),
+        );
+        let codex_args =
+            resolve_workspace_codex_args(&entry, parent_entry.as_ref(), Some(&settings));
+        let connected = sessions.lock().await.contains_key(&entry.id);
+        if !connected {
+            continue;
+        }
+        let new_session = match spawn_session(
+            entry.clone(),
+            default_bin.clone(),
+            codex_args,
+            codex_home,
+        )
+        .await
+        {
+            Ok(session) => session,
+            Err(error) => {
+                eprintln!(
+                    "respawn_sessions: respawn failed for workspace {}: {error}",
+                    entry.id
+                );
+                continue;
+            }
+        };
+        if let Some(old_session) = sessions.lock().await.insert(entry.id.clone(), new_session) {
+            let mut child = old_session.child.lock().await;
+            let _ = child.kill().await;
+        }
+    }
+
+    Ok(())
 }
 
 pub(crate) async fn update_workspace_codex_bin_core(

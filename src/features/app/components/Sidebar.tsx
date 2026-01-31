@@ -1,9 +1,4 @@
-import type {
-  AccountSnapshot,
-  RateLimitSnapshot,
-  ThreadSummary,
-  WorkspaceInfo,
-} from "../../../types";
+import type { RateLimitSnapshot, ThreadSummary, WorkspaceInfo } from "../../../types";
 import { createPortal } from "react-dom";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { RefObject } from "react";
@@ -24,6 +19,7 @@ import { useSidebarScrollFade } from "../hooks/useSidebarScrollFade";
 import { useThreadRows } from "../hooks/useThreadRows";
 import { getUsageLabels } from "../utils/usageLabels";
 import { formatRelativeTimeShort } from "../../../utils/time";
+import type { AccountSwitcherState } from "../hooks/useAccountProfiles";
 
 const COLLAPSED_GROUPS_STORAGE_KEY = "codexmonitor.collapsedGroups";
 const UNGROUPED_COLLAPSE_ID = "__ungrouped__";
@@ -53,10 +49,7 @@ type SidebarProps = {
   activeThreadId: string | null;
   accountRateLimits: RateLimitSnapshot | null;
   usageShowRemaining: boolean;
-  accountInfo: AccountSnapshot | null;
-  onSwitchAccount: () => void;
-  onCancelSwitchAccount: () => void;
-  accountSwitching: boolean;
+  accountSwitcher: AccountSwitcherState;
   onOpenSettings: () => void;
   onOpenDebug: () => void;
   showDebugButton: boolean;
@@ -104,10 +97,7 @@ export function Sidebar({
   activeThreadId,
   accountRateLimits,
   usageShowRemaining,
-  accountInfo,
-  onSwitchAccount,
-  onCancelSwitchAccount,
-  accountSwitching,
+  accountSwitcher,
   onOpenSettings,
   onOpenDebug,
   showDebugButton,
@@ -220,16 +210,7 @@ export function Sidebar({
     [normalizedQuery],
   );
 
-  const accountEmail = accountInfo?.email?.trim() ?? "";
-  const accountButtonLabel = accountEmail
-    ? accountEmail
-    : accountInfo?.type === "apikey"
-      ? "API key"
-      : "Sign in to Codex";
-  const accountActionLabel = accountEmail ? "Switch account" : "Sign in";
   const showAccountSwitcher = Boolean(activeWorkspaceId);
-  const accountSwitchDisabled = accountSwitching || !activeWorkspaceId;
-  const accountCancelDisabled = !accountSwitching || !activeWorkspaceId;
 
   const pinnedThreadRows = useMemo(() => {
     type ThreadRow = { thread: ThreadSummary; depth: number };
@@ -645,13 +626,7 @@ export function Sidebar({
         onOpenDebug={onOpenDebug}
         showDebugButton={showDebugButton}
         showAccountSwitcher={showAccountSwitcher}
-        accountLabel={accountButtonLabel}
-        accountActionLabel={accountActionLabel}
-        accountDisabled={accountSwitchDisabled}
-        accountSwitching={accountSwitching}
-        accountCancelDisabled={accountCancelDisabled}
-        onSwitchAccount={onSwitchAccount}
-        onCancelSwitchAccount={onCancelSwitchAccount}
+        accountSwitcher={accountSwitcher}
       />
     </aside>
   );

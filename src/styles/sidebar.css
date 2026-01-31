@@ -1076,15 +1076,65 @@
   position: relative;
 }
 
-.sidebar-account-popover {
+.sidebar-account-trigger {
+  position: relative;
+}
+
+.sidebar-account-busy-dot {
   position: absolute;
-  left: 0;
-  bottom: 42px;
-  min-width: 220px;
-  padding: 10px 12px;
+  top: 5px;
+  right: 5px;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--border-accent);
+  box-shadow: 0 0 0 2px var(--surface-card);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.sidebar-account-popover {
+  position: fixed;
+  min-width: 280px;
+  max-width: 320px;
+  padding: 14px;
   display: grid;
-  gap: 8px;
-  z-index: 10;
+  gap: 12px;
+  z-index: 9999;
+  border-radius: 18px;
+  box-shadow: 0 24px 40px rgba(9, 12, 20, 0.35);
+}
+
+.sidebar-account-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.sidebar-account-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sidebar-account-icon-button {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  color: var(--text-stronger);
+  border-color: var(--border-muted);
+  background: color-mix(in srgb, var(--surface-card) 80%, transparent);
+}
+
+.sidebar-account-icon-button svg {
+  width: 14px;
+  height: 14px;
+  display: block;
+  stroke: currentColor;
 }
 
 .sidebar-account-title {
@@ -1094,29 +1144,168 @@
   letter-spacing: 0.08em;
 }
 
-.sidebar-account-value {
-  color: var(--text-stronger);
-  font-weight: 600;
-  font-size: 12px;
-  max-width: 220px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.sidebar-account-actions-row {
-  display: flex;
-  align-items: stretch;
-  gap: 6px;
-}
-
-.sidebar-account-action {
-  width: 100%;
-  justify-content: center;
+.sidebar-account-status {
+  color: var(--text-muted);
   font-size: 11px;
 }
 
-.sidebar-account-action[aria-busy="true"]:disabled {
+.sidebar-account-list {
+  display: grid;
+  gap: 8px;
+}
+
+.sidebar-account-settings {
+  display: grid;
+  gap: 12px;
+}
+
+.sidebar-account-settings-row {
+  display: grid;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-card-muted);
+}
+
+.sidebar-account-settings-global {
+  grid-template-columns: 1fr auto;
+  align-items: center;
+}
+
+.sidebar-account-settings-title {
+  font-size: 12px;
+  color: var(--text-strong);
+}
+
+.sidebar-account-settings-subtitle {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.sidebar-account-settings-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sidebar-account-settings-input {
+  flex: 1;
+}
+
+.sidebar-account-delete {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.sidebar-account-toggle {
+  width: 38px;
+  height: 20px;
+  border-radius: 999px;
+  border: 1px solid var(--border-muted);
+  background: var(--surface-card);
+  display: inline-flex;
+  align-items: center;
+  padding: 2px;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.sidebar-account-toggle-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: var(--text-subtle);
+  transform: translateX(0);
+  transition: transform 120ms ease, background 120ms ease;
+}
+
+.sidebar-account-toggle.is-on {
+  border-color: var(--border-accent);
+  background: color-mix(in srgb, var(--border-accent) 18%, var(--surface-card));
+}
+
+.sidebar-account-toggle.is-on .sidebar-account-toggle-thumb {
+  transform: translateX(14px);
+  background: var(--text-stronger);
+}
+
+.sidebar-account-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: var(--surface-card-muted);
+  border: 1px solid var(--border-subtle);
+}
+
+.sidebar-account-row.is-active {
+  background: var(--surface-card);
+  border-color: var(--border-accent-soft);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--border-accent-soft) 70%, transparent);
+}
+
+.sidebar-account-row-main {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.sidebar-account-name {
+  color: var(--text-stronger);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidebar-account-subtitle {
+  color: var(--text-muted);
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidebar-account-row-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.sidebar-account-plan,
+.sidebar-account-active {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--border-subtle);
+  color: var(--text-subtle);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.sidebar-account-active {
+  background: color-mix(in srgb, var(--border-accent) 15%, transparent);
+  border-color: var(--border-accent);
+  color: var(--text-stronger);
+}
+
+.sidebar-account-row-action {
+  font-size: 11px;
+  padding: 4px 10px;
+  min-height: 28px;
+}
+
+.sidebar-account-row-action[aria-busy="true"]:disabled {
   opacity: 0.85;
 }
 
@@ -1140,6 +1329,58 @@
   to {
     transform: rotate(360deg);
   }
+}
+
+.sidebar-account-warning {
+  display: grid;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface-card-muted) 70%, transparent);
+  border: 1px solid var(--border-muted);
+}
+
+.sidebar-account-warning-text {
+  font-size: 11px;
+  color: var(--text-subtle);
+}
+
+.sidebar-account-warning-action {
+  justify-content: center;
+  font-size: 11px;
+}
+
+.sidebar-account-footer {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.sidebar-account-add {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+}
+
+.sidebar-account-input {
+  width: 100%;
+}
+
+.sidebar-account-add-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sidebar-account-add-actions .primary,
+.sidebar-account-add-actions .ghost {
+  min-height: 28px;
+  font-size: 11px;
+}
+
+.sidebar-account-add-button {
+  width: 100%;
+  justify-content: center;
+  font-size: 11px;
 }
 
 .sidebar-account-cancel {

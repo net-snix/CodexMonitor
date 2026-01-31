@@ -8,6 +8,7 @@ import {
   interruptTurn,
   listThreads,
   resumeThread,
+  startThread,
 } from "../../../services/tauri";
 import { useThreads } from "./useThreads";
 
@@ -59,6 +60,13 @@ describe("useThreads UX integration", () => {
   afterEach(() => {
     nowSpy.mockRestore();
   });
+
+  const flushUpdates = async (fn: () => void) => {
+    await act(async () => {
+      fn();
+      await Promise.resolve();
+    });
+  };
 
   it("resumes selected threads when no local items exist", async () => {
     vi.mocked(resumeThread).mockResolvedValue({
@@ -125,7 +133,7 @@ describe("useThreads UX integration", () => {
     }
   });
 
-  it("keeps the latest plan visible when a new turn starts", () => {
+  it("keeps the latest plan visible when a new turn starts", async () => {
     const { result } = renderHook(() =>
       useThreads({
         activeWorkspace: workspace,
@@ -133,7 +141,7 @@ describe("useThreads UX integration", () => {
       }),
     );
 
-    act(() => {
+    await flushUpdates(() => {
       handlers?.onTurnPlanUpdated?.("ws-1", "thread-1", "turn-1", {
         explanation: " Plan note ",
         plan: [{ step: "Do it", status: "in_progress" }],
@@ -146,7 +154,7 @@ describe("useThreads UX integration", () => {
       steps: [{ step: "Do it", status: "inProgress" }],
     });
 
-    act(() => {
+    await flushUpdates(() => {
       handlers?.onTurnStarted?.("ws-1", "thread-1", "turn-2");
     });
 
@@ -226,7 +234,12 @@ describe("useThreads UX integration", () => {
     });
   });
 
-  it("clears empty plan updates to null", () => {
+  it("falls back to a new thread when resume fails", async () => {
+    vi.mocked(resumeThread).mockResolvedValue(null);
+    vi.mocked(startThread).mockResolvedValue({
+      result: { thread: { id: "thread-new" } },
+    });
+
     const { result } = renderHook(() =>
       useThreads({
         activeWorkspace: workspace,
@@ -235,6 +248,25 @@ describe("useThreads UX integration", () => {
     );
 
     act(() => {
+      result.current.setActiveThreadId("thread-missing");
+    });
+
+    await act(async () => {
+      await result.current.sendUserMessage("Hello");
+    });
+
+    expect(vi.mocked(startThread)).toHaveBeenCalledWith("ws-1");
+  });
+
+  it("clears empty plan updates to null", async () => {
+    const { result } = renderHook(() =>
+      useThreads({
+        activeWorkspace: workspace,
+        onWorkspaceConnected: vi.fn(),
+      }),
+    );
+
+    await flushUpdates(() => {
       handlers?.onTurnPlanUpdated?.("ws-1", "thread-1", "turn-1", {
         explanation: "   ",
         plan: [],
@@ -244,7 +276,7 @@ describe("useThreads UX integration", () => {
     expect(result.current.planByThread["thread-1"]).toBeNull();
   });
 
-  it("normalizes plan step status values", () => {
+  it("normalizes plan step status values", async () => {
     const { result } = renderHook(() =>
       useThreads({
         activeWorkspace: workspace,
@@ -252,7 +284,7 @@ describe("useThreads UX integration", () => {
       }),
     );
 
-    act(() => {
+    await flushUpdates(() => {
       handlers?.onTurnPlanUpdated?.("ws-1", "thread-1", "turn-1", {
         explanation: "",
         plan: [
@@ -278,7 +310,7 @@ describe("useThreads UX integration", () => {
     });
   });
 
-  it("replaces the plan when a new turn updates it", () => {
+  it("replaces the plan when a new turn updates it", async () => {
     const { result } = renderHook(() =>
       useThreads({
         activeWorkspace: workspace,
@@ -286,7 +318,7 @@ describe("useThreads UX integration", () => {
       }),
     );
 
-    act(() => {
+    await flushUpdates(() => {
       handlers?.onTurnPlanUpdated?.("ws-1", "thread-1", "turn-1", {
         explanation: "First plan",
         plan: [{ step: "Step 1", status: "pending" }],
@@ -304,7 +336,7 @@ describe("useThreads UX integration", () => {
     });
   });
 
-  it("keeps plans isolated per thread", () => {
+  it("keeps plans isolated per thread", async () => {
     const { result } = renderHook(() =>
       useThreads({
         activeWorkspace: workspace,
@@ -312,7 +344,7 @@ describe("useThreads UX integration", () => {
       }),
     );
 
-    act(() => {
+    await flushUpdates(() => {
       handlers?.onTurnPlanUpdated?.("ws-1", "thread-1", "turn-1", {
         explanation: "Thread 1 plan",
         plan: [{ step: "Step 1", status: "pending" }],

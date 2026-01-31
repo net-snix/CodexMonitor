@@ -473,6 +473,38 @@ export async function getAccountInfo(workspaceId: string) {
   return invoke<any>("account_read", { workspaceId });
 }
 
+export async function readCodexAuthStore(): Promise<string | null> {
+  const response = await invoke<{ store?: string | null }>("codex_auth_store_read");
+  const store = response?.store;
+  if (typeof store !== "string") {
+    return null;
+  }
+  const trimmed = store.trim();
+  return trimmed.length ? trimmed : null;
+}
+
+export async function setCodexAuthStoreFile(): Promise<void> {
+  await invoke("codex_auth_store_set_file");
+}
+
+export async function snapshotAuthProfile(profileId: string) {
+  return invoke<{ ok: boolean; missing?: boolean }>(
+    "codex_auth_profile_snapshot",
+    { profileId },
+  );
+}
+
+export async function applyAuthProfile(profileId: string) {
+  return invoke<{ ok: boolean; missing?: boolean }>(
+    "codex_auth_profile_apply",
+    { profileId },
+  );
+}
+
+export async function respawnSessions() {
+  return invoke<{ ok: boolean }>("respawn_sessions", {});
+}
+
 export async function runCodexLogin(workspaceId: string) {
   return invoke<{ output: string }>("codex_login", { workspaceId });
 }

@@ -29,7 +29,7 @@ async fn file_read_impl(
         return serde_json::from_value(response).map_err(|err| err.to_string());
     }
 
-    file_read_core(&state.workspaces, scope, kind, workspace_id).await
+    file_read_core(&state.workspaces, &state.app_settings, scope, kind, workspace_id).await
 }
 
 async fn file_write_impl(
@@ -56,7 +56,15 @@ async fn file_write_impl(
         return Ok(());
     }
 
-    file_write_core(&state.workspaces, scope, kind, workspace_id, content).await
+    file_write_core(
+        &state.workspaces,
+        &state.app_settings,
+        scope,
+        kind,
+        workspace_id,
+        content,
+    )
+    .await
 }
 
 #[tauri::command]

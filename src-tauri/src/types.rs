@@ -292,12 +292,32 @@ pub(crate) struct OpenAppTarget {
     pub(crate) args: Vec<String>,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+pub(crate) struct CodexProfile {
+    pub(crate) id: String,
+    pub(crate) label: String,
+    #[serde(default, rename = "codexHome")]
+    pub(crate) codex_home: String,
+    #[serde(default, rename = "cachedEmail")]
+    pub(crate) cached_email: Option<String>,
+    #[serde(default, rename = "cachedPlanType")]
+    pub(crate) cached_plan_type: Option<String>,
+    #[serde(default, rename = "lastUsedAt")]
+    pub(crate) last_used_at: Option<String>,
+    #[serde(default, rename = "createdAt")]
+    pub(crate) created_at: Option<String>,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub(crate) struct AppSettings {
     #[serde(default, rename = "codexBin")]
     pub(crate) codex_bin: Option<String>,
     #[serde(default, rename = "codexArgs")]
     pub(crate) codex_args: Option<String>,
+    #[serde(default, rename = "codexProfiles")]
+    pub(crate) codex_profiles: Vec<CodexProfile>,
+    #[serde(default, rename = "activeCodexProfileId")]
+    pub(crate) active_codex_profile_id: Option<String>,
     #[serde(default, rename = "backendMode")]
     pub(crate) backend_mode: BackendMode,
     #[serde(default = "default_remote_backend_host", rename = "remoteBackendHost")]
@@ -395,6 +415,8 @@ pub(crate) struct AppSettings {
     pub(crate) theme: String,
     #[serde(default = "default_usage_show_remaining", rename = "usageShowRemaining")]
     pub(crate) usage_show_remaining: bool,
+    #[serde(default, rename = "autoSwitchOnLimit")]
+    pub(crate) auto_switch_on_limit: bool,
     #[serde(default = "default_ui_font_family", rename = "uiFontFamily")]
     pub(crate) ui_font_family: String,
     #[serde(default = "default_code_font_family", rename = "codeFontFamily")]
@@ -728,6 +750,8 @@ impl Default for AppSettings {
         Self {
             codex_bin: None,
             codex_args: None,
+            codex_profiles: Vec::new(),
+            active_codex_profile_id: None,
             backend_mode: BackendMode::Local,
             remote_backend_host: default_remote_backend_host(),
             remote_backend_token: None,
@@ -754,6 +778,7 @@ impl Default for AppSettings {
             ui_scale: 1.0,
             theme: default_theme(),
             usage_show_remaining: default_usage_show_remaining(),
+            auto_switch_on_limit: false,
             ui_font_family: default_ui_font_family(),
             code_font_family: default_code_font_family(),
             code_font_size: default_code_font_size(),
@@ -793,6 +818,8 @@ mod tests {
     fn app_settings_defaults_from_empty_json() {
         let settings: AppSettings = serde_json::from_str("{}").expect("settings deserialize");
         assert!(settings.codex_bin.is_none());
+        assert!(settings.codex_profiles.is_empty());
+        assert!(settings.active_codex_profile_id.is_none());
         assert!(matches!(settings.backend_mode, BackendMode::Local));
         assert_eq!(settings.remote_backend_host, "127.0.0.1:4732");
         assert!(settings.remote_backend_token.is_none());
@@ -852,6 +879,7 @@ mod tests {
         assert!((settings.ui_scale - 1.0).abs() < f64::EPSILON);
         assert_eq!(settings.theme, "system");
         assert!(!settings.usage_show_remaining);
+        assert!(!settings.auto_switch_on_limit);
         assert!(settings.ui_font_family.contains("SF Pro Text"));
         assert!(settings.code_font_family.contains("SF Mono"));
         assert_eq!(settings.code_font_size, 11);

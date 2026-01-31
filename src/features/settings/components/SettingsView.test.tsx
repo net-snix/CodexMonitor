@@ -7,6 +7,7 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
+import { act } from "react";
 import type { ComponentProps } from "react";
 import { describe, expect, it, vi } from "vitest";
 import type { AppSettings, WorkspaceInfo } from "../../../types";
@@ -20,6 +21,8 @@ vi.mock("@tauri-apps/plugin-dialog", () => ({
 const baseSettings: AppSettings = {
   codexBin: null,
   codexArgs: null,
+  codexProfiles: [],
+  activeCodexProfileId: null,
   backendMode: "local",
   remoteBackendHost: "127.0.0.1:4732",
   remoteBackendToken: null,
@@ -46,6 +49,7 @@ const baseSettings: AppSettings = {
   uiScale: 1,
   theme: "system",
   usageShowRemaining: false,
+  autoSwitchOnLimit: false,
   uiFontFamily:
     "\"SF Pro Text\", \"SF Pro Display\", -apple-system, \"Helvetica Neue\", sans-serif",
   codeFontFamily:
@@ -174,7 +178,9 @@ describe("SettingsView Display", () => {
     if (!toggle) {
       throw new Error("Expected remaining limits toggle");
     }
-    fireEvent.click(toggle);
+    act(() => {
+      fireEvent.click(toggle);
+    });
 
     await waitFor(() => {
       expect(onUpdateAppSettings).toHaveBeenCalledWith(
@@ -183,7 +189,7 @@ describe("SettingsView Display", () => {
     });
   });
 
-  it("toggles reduce transparency", () => {
+  it("toggles reduce transparency", async () => {
     const onToggleTransparency = vi.fn();
     renderDisplaySection({ onToggleTransparency, reduceTransparency: false });
 
@@ -199,7 +205,10 @@ describe("SettingsView Display", () => {
     if (!toggle) {
       throw new Error("Expected reduce transparency toggle");
     }
-    fireEvent.click(toggle);
+    await act(async () => {
+      fireEvent.click(toggle);
+      await Promise.resolve();
+    });
 
     expect(onToggleTransparency).toHaveBeenCalledWith(true);
   });
@@ -377,7 +386,7 @@ describe("SettingsView Codex overrides", () => {
 });
 
 describe("SettingsView Shortcuts", () => {
-  it("closes on Cmd+W", () => {
+  it("closes on Cmd+W", async () => {
     const onClose = vi.fn();
     render(
       <SettingsView
@@ -410,14 +419,17 @@ describe("SettingsView Shortcuts", () => {
       />,
     );
 
-    window.dispatchEvent(
-      new KeyboardEvent("keydown", { key: "w", metaKey: true, bubbles: true }),
-    );
+    await act(async () => {
+      window.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "w", metaKey: true, bubbles: true }),
+      );
+      await Promise.resolve();
+    });
 
     expect(onClose).toHaveBeenCalled();
   });
 
-  it("closes on Escape", () => {
+  it("closes on Escape", async () => {
     const onClose = vi.fn();
     render(
       <SettingsView
@@ -450,7 +462,12 @@ describe("SettingsView Shortcuts", () => {
       />,
     );
 
-    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    await act(async () => {
+      window.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+      );
+      await Promise.resolve();
+    });
 
     expect(onClose).toHaveBeenCalled();
   });

@@ -113,9 +113,21 @@ export type OpenAppTarget = {
   args: string[];
 };
 
+export type CodexProfile = {
+  id: string;
+  label: string;
+  codexHome: string;
+  cachedEmail?: string | null;
+  cachedPlanType?: string | null;
+  lastUsedAt?: string | null;
+  createdAt?: string | null;
+};
+
 export type AppSettings = {
   codexBin: string | null;
   codexArgs: string | null;
+  codexProfiles: CodexProfile[];
+  activeCodexProfileId: string | null;
   backendMode: BackendMode;
   remoteBackendHost: string;
   remoteBackendToken: string | null;
@@ -142,6 +154,7 @@ export type AppSettings = {
   uiScale: number;
   theme: ThemePreference;
   usageShowRemaining: boolean;
+  autoSwitchOnLimit: boolean;
   uiFontFamily: string;
   codeFontFamily: string;
   codeFontSize: number;

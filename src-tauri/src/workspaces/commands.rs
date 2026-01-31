@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::Arc;
 
-use serde_json::json;
+use serde_json::{json, Value};
 use tauri::{AppHandle, Manager, State};
 use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
@@ -25,7 +25,7 @@ use super::worktree::{
 use crate::backend::app_server::WorkspaceSession;
 use crate::codex::spawn_workspace_session;
 use crate::codex::args::resolve_workspace_codex_args;
-use crate::codex::home::resolve_workspace_codex_home;
+use crate::codex::home::resolve_workspace_codex_home_with_settings;
 use crate::git_utils::resolve_git_root;
 use crate::remote_backend;
 use crate::shared::workspaces_core;
@@ -85,6 +85,28 @@ pub(crate) async fn list_workspaces(
     }
 
     Ok(workspaces_core::list_workspaces_core(&state.workspaces, &state.sessions).await)
+}
+
+#[tauri::command]
+pub(crate) async fn respawn_sessions(
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<Value, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return remote_backend::call_remote(&*state, app, "respawn_sessions", json!({})).await;
+    }
+
+    let app_handle = app.clone();
+    workspaces_core::respawn_sessions_core(
+        &state.workspaces,
+        &state.sessions,
+        &state.app_settings,
+        move |entry, default_bin, codex_args, codex_home| {
+            spawn_with_app(&app_handle, entry, default_bin, codex_args, codex_home)
+        },
+    )
+    .await?;
+    Ok(json!({ "ok": true }))
 }
 
 
@@ -220,14 +242,10 @@ pub(crate) async fn add_clone(
         },
     };
 
-    let (default_bin, codex_args) = {
-        let settings = state.app_settings.lock().await;
-        (
-            settings.codex_bin.clone(),
-            resolve_workspace_codex_args(&entry, None, Some(&settings)),
-        )
-    };
-    let codex_home = resolve_workspace_codex_home(&entry, None);
+    let settings = state.app_settings.lock().await.clone();
+    let default_bin = settings.codex_bin.clone();
+    let codex_args = resolve_workspace_codex_args(&entry, None, Some(&settings));
+    let codex_home = resolve_workspace_codex_home_with_settings(&entry, None, Some(&settings));
     let session = match spawn_workspace_session(
         entry.clone(),
         default_bin,
