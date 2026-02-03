@@ -6,8 +6,12 @@ CodexMonitor is a macOS Tauri app for orchestrating multiple Codex agents across
 
 ## Fork differences (net-snix)
 
+Strikethrough means the item has landed in origin.
+
 - Account saver: persist multiple Codex auth profiles.
 - Easy switching: one-click switch between saved accounts; optional auto-switch when limits hit.
+- ~~Dim mode~~
+- ~~Usage-left toggle differs~~
 
 ## Features
 
