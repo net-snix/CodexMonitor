@@ -10,8 +10,8 @@ Strikethrough means the item has landed in origin.
 
 - Account saver: persist multiple Codex auth profiles.
 - Easy switching: one-click switch between saved accounts; optional auto-switch when limits hit.
-- ~~Dim mode~~
-- ~~Usage limit toggle shows remaining instead of used~~
+- ~~Dim mode~~ (Added to origin)
+- ~~Usage limit toggle shows remaining instead of used~~ (Added to origin)
 
 ## Features
 
