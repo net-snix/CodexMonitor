@@ -65,14 +65,15 @@ use std::sync::Arc;
 use ignore::WalkBuilder;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::{broadcast, mpsc, oneshot, Mutex};
+use tokio::sync::{broadcast, mpsc, Mutex};
 
 use backend::app_server::{
     spawn_workspace_session, WorkspaceSession,
 };
-use backend::events::{AppServerEvent, EventSink, TerminalOutput};
+use backend::events::{AppServerEvent, EventSink, TerminalExit, TerminalOutput};
 use storage::{read_settings, read_workspaces};
 use shared::{codex_core, files_core, git_core, settings_core, workspaces_core, worktree_core};
+use shared::codex_core::CodexLoginCancelState;
 use workspace_settings::apply_workspace_settings_update;
 use types::{
     AppSettings, WorkspaceEntry, WorkspaceInfo, WorkspaceSettings, WorktreeSetupStatus,
@@ -108,6 +109,8 @@ enum DaemonEvent {
     AppServer(AppServerEvent),
     #[allow(dead_code)]
     TerminalOutput(TerminalOutput),
+    #[allow(dead_code)]
+    TerminalExit(TerminalExit),
 }
 
 impl EventSink for DaemonEventSink {
@@ -117,6 +120,10 @@ impl EventSink for DaemonEventSink {
 
     fn emit_terminal_output(&self, event: TerminalOutput) {
         let _ = self.tx.send(DaemonEvent::TerminalOutput(event));
+    }
+
+    fn emit_terminal_exit(&self, event: TerminalExit) {
+        let _ = self.tx.send(DaemonEvent::TerminalExit(event));
     }
 }
 
@@ -134,7 +141,7 @@ struct DaemonState {
     settings_path: PathBuf,
     app_settings: Mutex<AppSettings>,
     event_sink: DaemonEventSink,
-    codex_login_cancels: Mutex<HashMap<String, oneshot::Sender<()>>>,
+    codex_login_cancels: Mutex<HashMap<String, CodexLoginCancelState>>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -572,6 +579,15 @@ impl DaemonState {
         codex_core::archive_thread_core(&self.sessions, workspace_id, thread_id).await
     }
 
+    async fn set_thread_name(
+        &self,
+        workspace_id: String,
+        thread_id: String,
+        name: String,
+    ) -> Result<Value, String> {
+        codex_core::set_thread_name_core(&self.sessions, workspace_id, thread_id, name).await
+    }
+
     async fn send_user_message(
         &self,
         workspace_id: String,
@@ -677,21 +693,25 @@ impl DaemonState {
     }
 
     async fn codex_login(&self, workspace_id: String) -> Result<Value, String> {
-        codex_core::codex_login_core(
-            &self.workspaces,
-            &self.app_settings,
-            &self.codex_login_cancels,
-            workspace_id,
-        )
-        .await
+        codex_core::codex_login_core(&self.sessions, &self.codex_login_cancels, workspace_id).await
     }
 
     async fn codex_login_cancel(&self, workspace_id: String) -> Result<Value, String> {
-        codex_core::codex_login_cancel_core(&self.codex_login_cancels, workspace_id).await
+        codex_core::codex_login_cancel_core(&self.sessions, &self.codex_login_cancels, workspace_id)
+            .await
     }
 
     async fn skills_list(&self, workspace_id: String) -> Result<Value, String> {
         codex_core::skills_list_core(&self.sessions, workspace_id).await
+    }
+
+    async fn apps_list(
+        &self,
+        workspace_id: String,
+        cursor: Option<String>,
+        limit: Option<u32>,
+    ) -> Result<Value, String> {
+        codex_core::apps_list_core(&self.sessions, workspace_id, cursor, limit).await
     }
 
     async fn respond_to_server_request(
@@ -922,6 +942,10 @@ fn build_event_notification(event: DaemonEvent) -> Option<String> {
         }),
         DaemonEvent::TerminalOutput(payload) => json!({
             "method": "terminal-output",
+            "params": payload,
+        }),
+        DaemonEvent::TerminalExit(payload) => json!({
+            "method": "terminal-exit",
             "params": payload,
         }),
     };
@@ -1195,6 +1219,12 @@ async fn handle_rpc_request(
             let thread_id = parse_string(&params, "threadId")?;
             state.archive_thread(workspace_id, thread_id).await
         }
+        "set_thread_name" => {
+            let workspace_id = parse_string(&params, "workspaceId")?;
+            let thread_id = parse_string(&params, "threadId")?;
+            let name = parse_string(&params, "name")?;
+            state.set_thread_name(workspace_id, thread_id, name).await
+        }
         "send_user_message" => {
             let workspace_id = parse_string(&params, "workspaceId")?;
             let thread_id = parse_string(&params, "threadId")?;
@@ -1272,6 +1302,12 @@ async fn handle_rpc_request(
         "skills_list" => {
             let workspace_id = parse_string(&params, "workspaceId")?;
             state.skills_list(workspace_id).await
+        }
+        "apps_list" => {
+            let workspace_id = parse_string(&params, "workspaceId")?;
+            let cursor = parse_optional_string(&params, "cursor");
+            let limit = parse_optional_u32(&params, "limit");
+            state.apps_list(workspace_id, cursor, limit).await
         }
         "respond_to_server_request" => {
             let workspace_id = parse_string(&params, "workspaceId")?;

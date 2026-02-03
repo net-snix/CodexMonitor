@@ -6,7 +6,32 @@ export type WorkspaceSettings = {
   codexHome?: string | null;
   codexArgs?: string | null;
   launchScript?: string | null;
+  launchScripts?: LaunchScriptEntry[] | null;
   worktreeSetupScript?: string | null;
+};
+
+export type LaunchScriptIconId =
+  | "play"
+  | "build"
+  | "debug"
+  | "wrench"
+  | "terminal"
+  | "code"
+  | "server"
+  | "database"
+  | "package"
+  | "test"
+  | "lint"
+  | "dev"
+  | "git"
+  | "config"
+  | "logs";
+
+export type LaunchScriptEntry = {
+  id: string;
+  script: string;
+  icon: LaunchScriptIconId;
+  label?: string | null;
 };
 
 export type WorkspaceGroup = {
@@ -89,6 +114,7 @@ export type ReviewTarget =
 export type AccessMode = "read-only" | "current" | "full-access";
 export type BackendMode = "local" | "remote";
 export type ThemePreference = "system" | "light" | "dark" | "dim";
+export type PersonalityPreference = "friendly" | "pragmatic";
 
 
 export type ComposerEditorPreset = "default" | "helpful" | "smart";
@@ -132,6 +158,7 @@ export type AppSettings = {
   remoteBackendHost: string;
   remoteBackendToken: string | null;
   defaultAccessMode: AccessMode;
+  reviewDeliveryMode: "inline" | "detached";
   composerModelShortcut: string | null;
   composerAccessShortcut: string | null;
   composerReasoningShortcut: string | null;
@@ -159,11 +186,14 @@ export type AppSettings = {
   codeFontFamily: string;
   codeFontSize: number;
   notificationSoundsEnabled: boolean;
+  systemNotificationsEnabled: boolean;
   preloadGitDiffs: boolean;
   experimentalCollabEnabled: boolean;
-  experimentalCollaborationModesEnabled: boolean;
+  collaborationModesEnabled: boolean;
   experimentalSteerEnabled: boolean;
   experimentalUnifiedExecEnabled: boolean;
+  experimentalAppsEnabled: boolean;
+  personality: PersonalityPreference;
   dictationEnabled: boolean;
   dictationModelId: string;
   dictationPreferredLanguage: string | null;
@@ -446,6 +476,15 @@ export type SkillOption = {
   name: string;
   path: string;
   description?: string;
+};
+
+export type AppOption = {
+  id: string;
+  name: string;
+  description?: string;
+  isAccessible: boolean;
+  installUrl?: string | null;
+  distributionChannel?: string | null;
 };
 
 export type CustomPromptOption = {

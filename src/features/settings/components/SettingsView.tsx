@@ -162,6 +162,7 @@ export type SettingsViewProps = {
   scaleShortcutTitle: string;
   scaleShortcutText: string;
   onTestNotificationSound: () => void;
+  onTestSystemNotification: () => void;
   dictationModelStatus?: DictationModelStatus | null;
   onDownloadDictationModel?: () => void;
   onCancelDictationDownload?: () => void;
@@ -177,7 +178,7 @@ type SettingsSection =
   | "shortcuts"
   | "open-apps"
   | "git";
-type CodexSection = SettingsSection | "codex" | "experimental";
+type CodexSection = SettingsSection | "codex" | "features";
 type ShortcutSettingKey =
   | "composerModelShortcut"
   | "composerAccessShortcut"
@@ -243,6 +244,34 @@ const buildOpenAppDrafts = (targets: OpenAppTarget[]): OpenAppDraft[] =>
     argsText: target.args.join(" "),
   }));
 
+const isOpenAppLabelValid = (label: string) => label.trim().length > 0;
+
+const isOpenAppDraftComplete = (draft: OpenAppDraft) => {
+  if (!isOpenAppLabelValid(draft.label)) {
+    return false;
+  }
+  if (draft.kind === "app") {
+    return Boolean(draft.appName?.trim());
+  }
+  if (draft.kind === "command") {
+    return Boolean(draft.command?.trim());
+  }
+  return true;
+};
+
+const isOpenAppTargetComplete = (target: OpenAppTarget) => {
+  if (!isOpenAppLabelValid(target.label)) {
+    return false;
+  }
+  if (target.kind === "app") {
+    return Boolean(target.appName?.trim());
+  }
+  if (target.kind === "command") {
+    return Boolean(target.command?.trim());
+  }
+  return true;
+};
+
 const createOpenAppId = () => {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
     return crypto.randomUUID();
@@ -273,6 +302,7 @@ export function SettingsView({
   scaleShortcutTitle,
   scaleShortcutText,
   onTestNotificationSound,
+  onTestSystemNotification,
   dictationModelStatus,
   onDownloadDictationModel,
   onCancelDictationDownload,
@@ -702,8 +732,13 @@ export function SettingsView({
   const handleCommitOpenApps = useCallback(
     async (drafts: OpenAppDraft[], selectedId = openAppSelectedId) => {
       const nextTargets = normalizeOpenAppTargets(drafts);
+      const resolvedSelectedId = nextTargets.find(
+        (target) => target.id === selectedId && isOpenAppTargetComplete(target),
+      )?.id;
+      const firstCompleteId = nextTargets.find(isOpenAppTargetComplete)?.id;
       const nextSelectedId =
-        nextTargets.find((target) => target.id === selectedId)?.id ??
+        resolvedSelectedId ??
+        firstCompleteId ??
         nextTargets[0]?.id ??
         DEFAULT_OPEN_APP_ID;
       setOpenAppDrafts(buildOpenAppDrafts(nextTargets));
@@ -796,6 +831,10 @@ export function SettingsView({
   };
 
   const handleSelectOpenAppDefault = (id: string) => {
+    const selectedTarget = openAppDrafts.find((target) => target.id === id);
+    if (selectedTarget && !isOpenAppDraftComplete(selectedTarget)) {
+      return;
+    }
     setOpenAppSelectedId(id);
     if (typeof window !== "undefined") {
       window.localStorage.setItem(OPEN_APP_STORAGE_KEY, id);
@@ -1056,11 +1095,11 @@ export function SettingsView({
             </button>
             <button
               type="button"
-              className={`settings-nav ${activeSection === "experimental" ? "active" : ""}`}
-              onClick={() => setActiveSection("experimental")}
+              className={`settings-nav ${activeSection === "features" ? "active" : ""}`}
+              onClick={() => setActiveSection("features")}
             >
               <FlaskConical aria-hidden />
-              Experimental
+              Features
             </button>
           </aside>
           <div className="settings-content">
@@ -1528,6 +1567,27 @@ export function SettingsView({
                     <span className="settings-toggle-knob" />
                   </button>
                 </div>
+                <div className="settings-toggle-row">
+                  <div>
+                    <div className="settings-toggle-title">System notifications</div>
+                    <div className="settings-toggle-subtitle">
+                      Show a macOS notification when a long-running agent finishes while the window is unfocused.
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className={`settings-toggle ${appSettings.systemNotificationsEnabled ? "on" : ""}`}
+                    onClick={() =>
+                      void onUpdateAppSettings({
+                        ...appSettings,
+                        systemNotificationsEnabled: !appSettings.systemNotificationsEnabled,
+                      })
+                    }
+                    aria-pressed={appSettings.systemNotificationsEnabled}
+                  >
+                    <span className="settings-toggle-knob" />
+                  </button>
+                </div>
                 <div className="settings-sound-actions">
                   <button
                     type="button"
@@ -1535,6 +1595,13 @@ export function SettingsView({
                     onClick={onTestNotificationSound}
                   >
                     Test sound
+                  </button>
+                  <button
+                    type="button"
+                    className="ghost settings-button-compact"
+                    onClick={onTestSystemNotification}
+                  >
+                    Test notification
                   </button>
                 </div>
               </section>
@@ -2401,8 +2468,26 @@ export function SettingsView({
                       getKnownOpenAppIcon(target.id) ??
                       openAppIconById[target.id] ??
                       GENERIC_APP_ICON;
+                    const labelValid = isOpenAppLabelValid(target.label);
+                    const appNameValid =
+                      target.kind !== "app" || Boolean(target.appName?.trim());
+                    const commandValid =
+                      target.kind !== "command" || Boolean(target.command?.trim());
+                    const isComplete = labelValid && appNameValid && commandValid;
+                    const incompleteHint = !labelValid
+                      ? "Label required"
+                      : target.kind === "app"
+                        ? "App name required"
+                        : target.kind === "command"
+                          ? "Command required"
+                          : "Complete required fields";
                     return (
-                      <div key={target.id} className="settings-open-app-row">
+                      <div
+                        key={target.id}
+                        className={`settings-open-app-row${
+                          isComplete ? "" : " is-incomplete"
+                        }`}
+                      >
                         <div className="settings-open-app-icon-wrap" aria-hidden>
                           <img
                             className="settings-open-app-icon"
@@ -2428,6 +2513,7 @@ export function SettingsView({
                                 void handleCommitOpenApps(openAppDrafts);
                               }}
                               aria-label={`Open app label ${index + 1}`}
+                              data-invalid={!labelValid || undefined}
                             />
                           </label>
                           <label className="settings-open-app-field settings-open-app-field--type">
@@ -2464,6 +2550,7 @@ export function SettingsView({
                                   void handleCommitOpenApps(openAppDrafts);
                                 }}
                                 aria-label={`Open app name ${index + 1}`}
+                                data-invalid={!appNameValid || undefined}
                               />
                             </label>
                           )}
@@ -2483,6 +2570,7 @@ export function SettingsView({
                                   void handleCommitOpenApps(openAppDrafts);
                                 }}
                                 aria-label={`Open app command ${index + 1}`}
+                                data-invalid={!commandValid || undefined}
                               />
                             </label>
                           )}
@@ -2507,12 +2595,22 @@ export function SettingsView({
                           )}
                         </div>
                         <div className="settings-open-app-actions">
+                          {!isComplete && (
+                            <span
+                              className="settings-open-app-status"
+                              title={incompleteHint}
+                              aria-label={incompleteHint}
+                            >
+                              Incomplete
+                            </span>
+                          )}
                           <label className="settings-open-app-default">
                             <input
                               type="radio"
                               name="open-app-default"
                               checked={target.id === openAppSelectedId}
                               onChange={() => handleSelectOpenAppDefault(target.id)}
+                              disabled={!isComplete}
                             />
                             Default
                           </label>
@@ -2727,6 +2825,30 @@ export function SettingsView({
                     <option value="current">On-request</option>
                     <option value="full-access">Full access</option>
                   </select>
+                </div>
+                <div className="settings-field">
+                  <label className="settings-field-label" htmlFor="review-delivery">
+                    Review mode
+                  </label>
+                  <select
+                    id="review-delivery"
+                    className="settings-select"
+                    value={appSettings.reviewDeliveryMode}
+                    onChange={(event) =>
+                      void onUpdateAppSettings({
+                        ...appSettings,
+                        reviewDeliveryMode:
+                          event.target.value as AppSettings["reviewDeliveryMode"],
+                      })
+                    }
+                  >
+                    <option value="inline">Inline (same thread)</option>
+                    <option value="detached">Detached (new review thread)</option>
+                  </select>
+                  <div className="settings-help">
+                    Choose whether <code>/review</code> runs in the current thread or a detached
+                    review thread.
+                  </div>
                 </div>
 
                 <div className="settings-field">
@@ -3000,15 +3122,15 @@ export function SettingsView({
 
               </section>
             )}
-            {activeSection === "experimental" && (
+            {activeSection === "features" && (
               <section className="settings-section">
-                <div className="settings-section-title">Experimental</div>
+                <div className="settings-section-title">Features</div>
                 <div className="settings-section-subtitle">
-                  Preview features that may change or be removed.
+                  Manage stable and experimental Codex features.
                 </div>
                 {hasCodexHomeOverrides && (
                   <div className="settings-help">
-                    Experimental flags are stored in the default CODEX_HOME config.toml.
+                    Feature settings are stored in the default CODEX_HOME config.toml.
                     <br />
                     Workspace overrides are not updated.
                   </div>
@@ -3027,6 +3149,62 @@ export function SettingsView({
                 {openConfigError && (
                   <div className="settings-help">{openConfigError}</div>
                 )}
+                <div className="settings-subsection-title">Stable Features</div>
+                <div className="settings-subsection-subtitle">
+                  Production-ready features enabled by default.
+                </div>
+                <div className="settings-toggle-row">
+                  <div>
+                    <div className="settings-toggle-title">Collaboration modes</div>
+                    <div className="settings-toggle-subtitle">
+                      Enable collaboration mode presets (Code, Plan).
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className={`settings-toggle ${
+                      appSettings.collaborationModesEnabled ? "on" : ""
+                    }`}
+                    onClick={() =>
+                      void onUpdateAppSettings({
+                        ...appSettings,
+                        collaborationModesEnabled:
+                          !appSettings.collaborationModesEnabled,
+                      })
+                    }
+                    aria-pressed={appSettings.collaborationModesEnabled}
+                  >
+                    <span className="settings-toggle-knob" />
+                  </button>
+                </div>
+                <div className="settings-toggle-row">
+                  <div>
+                    <div className="settings-toggle-title">Personality</div>
+                    <div className="settings-toggle-subtitle">
+                      Choose Codex communication style (writes top-level{" "}
+                      <code>personality</code> in config.toml).
+                    </div>
+                  </div>
+                  <select
+                    id="features-personality-select"
+                    className="settings-select"
+                    value={appSettings.personality}
+                    onChange={(event) =>
+                      void onUpdateAppSettings({
+                        ...appSettings,
+                        personality: event.target.value as AppSettings["personality"],
+                      })
+                    }
+                    aria-label="Personality"
+                  >
+                    <option value="friendly">Friendly</option>
+                    <option value="pragmatic">Pragmatic</option>
+                  </select>
+                </div>
+                <div className="settings-subsection-title">Experimental Features</div>
+                <div className="settings-subsection-subtitle">
+                  Preview features that may change or be removed.
+                </div>
                 <div className="settings-toggle-row">
                   <div>
                     <div className="settings-toggle-title">Multi-agent</div>
@@ -3050,24 +3228,21 @@ export function SettingsView({
                 </div>
                 <div className="settings-toggle-row">
                   <div>
-                    <div className="settings-toggle-title">Collaboration modes</div>
+                    <div className="settings-toggle-title">Apps</div>
                     <div className="settings-toggle-subtitle">
-                      Enable collaboration mode presets (Code, Plan).
+                      Enable ChatGPT apps/connectors and the <code>/apps</code> command.
                     </div>
                   </div>
                   <button
                     type="button"
-                    className={`settings-toggle ${
-                      appSettings.experimentalCollaborationModesEnabled ? "on" : ""
-                    }`}
+                    className={`settings-toggle ${appSettings.experimentalAppsEnabled ? "on" : ""}`}
                     onClick={() =>
                       void onUpdateAppSettings({
                         ...appSettings,
-                        experimentalCollaborationModesEnabled:
-                          !appSettings.experimentalCollaborationModesEnabled,
+                        experimentalAppsEnabled: !appSettings.experimentalAppsEnabled,
                       })
                     }
-                    aria-pressed={appSettings.experimentalCollaborationModesEnabled}
+                    aria-pressed={appSettings.experimentalAppsEnabled}
                   >
                     <span className="settings-toggle-knob" />
                   </button>

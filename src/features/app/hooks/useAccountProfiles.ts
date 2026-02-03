@@ -14,7 +14,9 @@ import {
   setCodexAuthStoreFile,
   snapshotAuthProfile,
 } from "../../../services/tauri";
+import { subscribeAppServerEvents } from "../../../services/events";
 import { ask } from "@tauri-apps/plugin-dialog";
+import { openUrl } from "@tauri-apps/plugin-opener";
 
 const DEFAULT_PROFILE_ID = "default";
 const DEFAULT_CODEX_HOME = "~/.codex";
@@ -66,6 +68,13 @@ type UseAccountProfilesArgs = {
 type SwitchOptions = {
   forceLogin?: boolean;
   nextSettings?: AppSettings;
+};
+
+type PendingLogin = {
+  workspaceId: string;
+  loginId: string | null;
+  resolve: () => void;
+  reject: (error: unknown) => void;
 };
 
 function slugify(value: string) {
@@ -177,6 +186,7 @@ export function useAccountProfiles({
   const previousActiveProfileIdRef = useRef<string | null>(null);
   const lastSavedSettingsRef = useRef<AppSettings | null>(null);
   const lastAutoSwitchKeyRef = useRef<string | null>(null);
+  const pendingLoginRef = useRef<PendingLogin | null>(null);
 
   const savedProfiles = useMemo(
     () => appSettings.codexProfiles ?? [],
@@ -262,6 +272,46 @@ export function useAccountProfiles({
       onProfileSwitchComplete?.(activeWorkspaceId);
     }
   }, [activeWorkspaceId, onProfileSwitchComplete]);
+
+  useEffect(() => {
+    const unlisten = subscribeAppServerEvents((payload) => {
+      const pending = pendingLoginRef.current;
+      if (!pending || payload.workspace_id !== pending.workspaceId) {
+        return;
+      }
+      const method = String(payload.message.method ?? "");
+      const params = (payload.message.params ?? {}) as Record<string, unknown>;
+
+      if (method === "account/login/completed") {
+        const loginId = String(params.loginId ?? params.login_id ?? "");
+        if (pending.loginId && loginId && pending.loginId !== loginId) {
+          return;
+        }
+        pendingLoginRef.current = null;
+        const success = Boolean(params.success);
+        const errorMessage = String(params.error ?? "").trim();
+        if (success && !accountSwitchCanceledRef.current) {
+          pending.resolve();
+        } else if (!accountSwitchCanceledRef.current) {
+          pending.reject(errorMessage || "Codex login failed.");
+        }
+        return;
+      }
+
+      if (method === "account/updated") {
+        if (accountSwitchCanceledRef.current) {
+          pendingLoginRef.current = null;
+          return;
+        }
+        pendingLoginRef.current = null;
+        pending.resolve();
+      }
+    });
+
+    return () => {
+      unlisten();
+    };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -412,7 +462,28 @@ export function useAccountProfiles({
           return;
         }
         if (applyResult.missing || shouldLogin) {
-          await runCodexLogin(activeWorkspaceId);
+          const { loginId, authUrl } = await runCodexLogin(activeWorkspaceId);
+          if (accountSwitchCanceledRef.current) {
+            return;
+          }
+          const loginPromise = new Promise<void>((resolve, reject) => {
+            pendingLoginRef.current = {
+              workspaceId: activeWorkspaceId,
+              loginId,
+              resolve,
+              reject,
+            };
+          });
+          try {
+            await openUrl(authUrl);
+          } catch (error) {
+            pendingLoginRef.current = null;
+            throw error;
+          }
+          await loginPromise;
+          if (accountSwitchCanceledRef.current) {
+            return;
+          }
           await snapshotAuthProfile(targetId);
         }
         if (accountSwitchCanceledRef.current) {
@@ -516,6 +587,11 @@ export function useAccountProfiles({
       return;
     }
     accountSwitchCanceledRef.current = true;
+    if (pendingLoginRef.current) {
+      const pending = pendingLoginRef.current;
+      pendingLoginRef.current = null;
+      pending.reject(new Error("Codex login canceled."));
+    }
     try {
       await cancelCodexLogin(activeWorkspaceId);
     } catch (error) {
