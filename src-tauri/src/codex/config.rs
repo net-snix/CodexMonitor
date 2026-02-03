@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use toml::Value as TomlValue;
 
-use crate::codex::home::{resolve_default_codex_home, resolve_default_codex_home_with_settings};
+use crate::codex::home::resolve_default_codex_home_with_settings;
 use crate::files::ops::{read_with_policy, write_with_policy};
 use crate::files::policy::{policy_for, FileKind, FilePolicy, FileScope};
 use crate::types::AppSettings;
@@ -48,10 +48,6 @@ pub(crate) fn read_apps_enabled_with_settings(
     read_feature_flag_with_settings("apps", settings)
 }
 
-pub(crate) fn read_apps_enabled() -> Result<Option<bool>, String> {
-    read_feature_flag("apps")
-}
-
 pub(crate) fn read_personality_with_settings(
     settings: Option<&AppSettings>,
 ) -> Result<Option<String>, String> {
@@ -59,17 +55,6 @@ pub(crate) fn read_personality_with_settings(
         return Ok(None);
     };
     read_personality_from_root(&root)
-}
-
-pub(crate) fn read_personality() -> Result<Option<String>, String> {
-    let Some(root) = resolve_default_codex_home() else {
-        return Ok(None);
-    };
-    read_personality_from_root(&root)
-}
-
-pub(crate) fn write_steer_enabled(enabled: bool) -> Result<(), String> {
-    write_feature_flag("steer", enabled)
 }
 
 pub(crate) fn write_collab_enabled_with_settings(
@@ -108,10 +93,6 @@ pub(crate) fn write_apps_enabled_with_settings(
     write_feature_flag_with_settings("apps", enabled, settings)
 }
 
-pub(crate) fn write_apps_enabled(enabled: bool) -> Result<(), String> {
-    write_feature_flag("apps", enabled)
-}
-
 pub(crate) fn write_personality_with_settings(
     personality: &str,
     settings: Option<&AppSettings>,
@@ -120,36 +101,6 @@ pub(crate) fn write_personality_with_settings(
         return Ok(());
     };
     write_personality_for_root(&root, personality)
-}
-
-pub(crate) fn write_personality(personality: &str) -> Result<(), String> {
-    let Some(root) = resolve_default_codex_home() else {
-        return Ok(());
-    };
-    write_personality_for_root(&root, personality)
-}
-
-fn read_feature_flag(key: &str) -> Result<Option<bool>, String> {
-    let Some(root) = resolve_default_codex_home() else {
-        return Ok(None);
-    };
-    let contents = read_config_contents_from_root(&root)?;
-    Ok(contents.as_deref().and_then(|value| find_feature_flag(value, key)))
-}
-
-fn write_feature_flag(key: &str, enabled: bool) -> Result<(), String> {
-    let Some(root) = resolve_default_codex_home() else {
-        return Ok(());
-    };
-    let policy = config_policy()?;
-    let response = read_with_policy(&root, policy)?;
-    let contents = if response.exists {
-        response.content
-    } else {
-        String::new()
-    };
-    let updated = upsert_feature_flag(&contents, key, enabled);
-    write_with_policy(&root, policy, &updated)
 }
 
 pub(crate) fn write_auth_store_file_with_settings(
