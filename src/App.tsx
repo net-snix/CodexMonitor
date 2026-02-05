@@ -24,6 +24,7 @@ import "./styles/about.css";
 import "./styles/tabbar.css";
 import "./styles/worktree-modal.css";
 import "./styles/clone-modal.css";
+import "./styles/branch-switcher-modal.css";
 import "./styles/settings.css";
 import "./styles/compact-base.css";
 import "./styles/compact-phone.css";
@@ -51,6 +52,8 @@ import { useApps } from "./features/apps/hooks/useApps";
 import { useCustomPrompts } from "./features/prompts/hooks/useCustomPrompts";
 import { useWorkspaceFileListing } from "./features/app/hooks/useWorkspaceFileListing";
 import { useGitBranches } from "./features/git/hooks/useGitBranches";
+import { useBranchSwitcher } from "./features/git/hooks/useBranchSwitcher";
+import { useBranchSwitcherShortcut } from "./features/git/hooks/useBranchSwitcherShortcut";
 import { useDebugLog } from "./features/debug/hooks/useDebugLog";
 import { useWorkspaceRefreshOnFocus } from "./features/workspaces/hooks/useWorkspaceRefreshOnFocus";
 import { useWorkspaceRestore } from "./features/workspaces/hooks/useWorkspaceRestore";
@@ -64,6 +67,7 @@ import {
 } from "./features/layout/components/SidebarToggleControls";
 import { useAppSettingsController } from "./features/app/hooks/useAppSettingsController";
 import { useUpdaterController } from "./features/app/hooks/useUpdaterController";
+import { useResponseRequiredNotificationsController } from "./features/app/hooks/useResponseRequiredNotificationsController";
 import { useErrorToasts } from "./features/notifications/hooks/useErrorToasts";
 import { useComposerShortcuts } from "./features/composer/hooks/useComposerShortcuts";
 import { useComposerMenuActions } from "./features/composer/hooks/useComposerMenuActions";
@@ -109,6 +113,7 @@ import { useOpenAppIcons } from "./features/app/hooks/useOpenAppIcons";
 import { useCodeCssVars } from "./features/app/hooks/useCodeCssVars";
 import { useAccountProfiles } from "./features/app/hooks/useAccountProfiles";
 import { useNewAgentDraft } from "./features/app/hooks/useNewAgentDraft";
+import { useSystemNotificationThreadLinks } from "./features/app/hooks/useSystemNotificationThreadLinks";
 
 const AboutView = lazy(() =>
   import("./features/about/components/AboutView").then((module) => ({
@@ -264,6 +269,10 @@ function MainApp() {
     [workspacesById],
   );
 
+  const recordPendingThreadLinkRef = useRef<
+    (workspaceId: string, threadId: string) => void
+  >(() => {});
+
   const {
     updaterState,
     startUpdate,
@@ -274,6 +283,8 @@ function MainApp() {
     notificationSoundsEnabled: appSettings.notificationSoundsEnabled,
     systemNotificationsEnabled: appSettings.systemNotificationsEnabled,
     getWorkspaceName,
+    onThreadNotificationSent: (workspaceId, threadId) =>
+      recordPendingThreadLinkRef.current(workspaceId, threadId),
     onDebug: addDebugEntry,
     successSoundUrl,
     errorSoundUrl,
@@ -355,6 +366,7 @@ function MainApp() {
   } = useGitPanelController({
     activeWorkspace,
     gitDiffPreloadEnabled: appSettings.preloadGitDiffs,
+    gitDiffIgnoreWhitespaceChanges: appSettings.gitDiffIgnoreWhitespaceChanges,
     isCompact,
     isTablet,
     activeTab,
@@ -411,8 +423,7 @@ function MainApp() {
     onDebug: addDebugEntry,
   });
 
-  useComposerShortcuts({
-    textareaRef: composerInputRef,
+  const composerShortcuts = {
     modelShortcut: appSettings.composerModelShortcut,
     accessShortcut: appSettings.composerAccessShortcut,
     reasoningShortcut: appSettings.composerReasoningShortcut,
@@ -431,6 +442,16 @@ function MainApp() {
     selectedEffort,
     onSelectEffort: setSelectedEffort,
     reasoningSupported,
+  };
+
+  useComposerShortcuts({
+    textareaRef: composerInputRef,
+    ...composerShortcuts,
+  });
+
+  useComposerShortcuts({
+    textareaRef: workspaceHomeTextareaRef,
+    ...composerShortcuts,
   });
 
   useComposerMenuActions({
@@ -475,6 +496,24 @@ function MainApp() {
     await createBranch(name);
     refreshGitStatus();
   };
+  const currentBranch = gitStatus.branchName ?? null;
+  const {
+    branchSwitcher,
+    openBranchSwitcher,
+    closeBranchSwitcher,
+    handleBranchSelect,
+  } = useBranchSwitcher({
+    activeWorkspace,
+    checkoutBranch: handleCheckoutBranch,
+    setActiveWorkspaceId,
+  });
+  const isBranchSwitcherEnabled =
+    Boolean(activeWorkspace?.connected) && activeWorkspace?.kind !== "worktree";
+  useBranchSwitcherShortcut({
+    shortcut: appSettings.branchSwitcherShortcut,
+    isEnabled: isBranchSwitcherEnabled,
+    onTrigger: openBranchSwitcher,
+  });
   const alertError = useCallback((error: unknown) => {
     alert(error instanceof Error ? error.message : String(error));
   }, []);
@@ -634,6 +673,7 @@ function MainApp() {
     startFork,
     startReview,
     startResume,
+    startCompact,
     startApps,
     startMcp,
     startStatus,
@@ -670,7 +710,7 @@ function MainApp() {
     collaborationMode: collaborationModePayload,
     accessMode,
     reviewDeliveryMode: appSettings.reviewDeliveryMode,
-    steerEnabled: appSettings.experimentalSteerEnabled,
+    steerEnabled: appSettings.steerEnabled,
     customPrompts: prompts,
     onMessageActivity: queueGitStatusRefresh
   });
@@ -708,6 +748,14 @@ function MainApp() {
     onProfileSwitchComplete: handleProfileSwitchComplete,
     alertError,
   });
+
+  useResponseRequiredNotificationsController({
+    systemNotificationsEnabled: appSettings.systemNotificationsEnabled,
+    approvals,
+    userInputRequests,
+    getWorkspaceName,
+    onDebug: addDebugEntry,
+  });
   const {
     newAgentDraftWorkspaceId,
     startingDraftThreadWorkspaceId,
@@ -726,6 +774,25 @@ function MainApp() {
   useEffect(() => {
     activeThreadIdRef.current = activeThreadId ?? null;
   }, [activeThreadId]);
+
+  const { recordPendingThreadLink } = useSystemNotificationThreadLinks({
+    hasLoadedWorkspaces: hasLoaded,
+    workspacesById,
+    refreshWorkspaces,
+    connectWorkspace,
+    setActiveTab,
+    setCenterMode,
+    setSelectedDiffPath,
+    setActiveWorkspaceId,
+    setActiveThreadId,
+  });
+
+  useEffect(() => {
+    recordPendingThreadLinkRef.current = recordPendingThreadLink;
+    return () => {
+      recordPendingThreadLinkRef.current = () => {};
+    };
+  }, [recordPendingThreadLink]);
 
   useAutoExitEmptyDiff({
     centerMode,
@@ -870,7 +937,9 @@ function MainApp() {
     openPrompt: openWorktreePrompt,
     confirmPrompt: confirmWorktreePrompt,
     cancelPrompt: cancelWorktreePrompt,
+    updateName: updateWorktreeName,
     updateBranch: updateWorktreeBranch,
+    updateCopyAgentsMd: updateWorktreeCopyAgentsMd,
     updateSetupScript: updateWorktreeSetupScript,
   } = useWorktreePrompt({
     addWorktreeAgent,
@@ -1108,7 +1177,7 @@ function MainApp() {
     activeWorkspace,
     isProcessing,
     isReviewing,
-    steerEnabled: appSettings.experimentalSteerEnabled,
+    steerEnabled: appSettings.steerEnabled,
     appsEnabled: appSettings.experimentalAppsEnabled,
     connectWorkspace,
     startThreadForWorkspace,
@@ -1117,6 +1186,7 @@ function MainApp() {
     startFork,
     startReview,
     startResume,
+    startCompact,
     startApps,
     startMcp,
     startStatus,
@@ -1335,7 +1405,7 @@ function MainApp() {
     ? workspacesById.get(activeWorkspace?.parentId ?? "") ?? null
     : null;
   const worktreeLabel = isWorktreeWorkspace
-    ? activeWorkspace?.worktree?.branch ?? activeWorkspace?.name ?? null
+    ? (activeWorkspace?.name?.trim() || activeWorkspace?.worktree?.branch) ?? null
     : null;
   const activeRenamePrompt =
     renameWorktreePrompt?.workspaceId === activeWorkspace?.id
@@ -1874,6 +1944,8 @@ function MainApp() {
     gitPanelMode,
     onGitPanelModeChange: handleGitPanelModeChange,
     gitDiffViewStyle,
+    gitDiffIgnoreWhitespaceChanges:
+      appSettings.gitDiffIgnoreWhitespaceChanges && diffSource !== "pr",
     worktreeApplyLabel: "apply",
     worktreeApplyTitle: activeParentWorkspace?.name
       ? `Apply changes to ${activeParentWorkspace.name}`
@@ -1889,6 +1961,7 @@ function MainApp() {
     selectedDiffPath,
     diffScrollRequestId,
     onSelectDiff: handleSelectDiff,
+    diffSource,
     gitLogEntries,
     gitLogTotal,
     gitLogAhead,
@@ -1983,7 +2056,7 @@ function MainApp() {
     onFileAutocompleteActiveChange: setFileAutocompleteActive,
     isReviewing,
     isProcessing,
-    steerEnabled: appSettings.experimentalSteerEnabled,
+    steerEnabled: appSettings.steerEnabled,
     reviewPrompt,
     onReviewPromptClose: closeReviewPrompt,
     onReviewPromptShowPreset: showPresetStep,
@@ -2211,6 +2284,7 @@ function MainApp() {
         activeTab={activeTab}
         tabletTab={tabletTab}
         centerMode={centerMode}
+        preloadGitDiffs={appSettings.preloadGitDiffs}
         hasActivePlan={hasActivePlan}
         activeWorkspace={Boolean(activeWorkspace)}
         sidebarNode={sidebarNode}
@@ -2243,7 +2317,9 @@ function MainApp() {
         onRenamePromptCancel={handleRenamePromptCancel}
         onRenamePromptConfirm={handleRenamePromptConfirm}
         worktreePrompt={worktreePrompt}
+        onWorktreePromptNameChange={updateWorktreeName}
         onWorktreePromptChange={updateWorktreeBranch}
+        onWorktreePromptCopyAgentsMdChange={updateWorktreeCopyAgentsMd}
         onWorktreeSetupScriptChange={updateWorktreeSetupScript}
         onWorktreePromptCancel={cancelWorktreePrompt}
         onWorktreePromptConfirm={confirmWorktreePrompt}
@@ -2254,6 +2330,13 @@ function MainApp() {
         onClonePromptClearCopiesFolder={clearCloneCopiesFolder}
         onClonePromptCancel={cancelClonePrompt}
         onClonePromptConfirm={confirmClonePrompt}
+        branchSwitcher={branchSwitcher}
+        branches={branches}
+        workspaces={workspaces}
+        activeWorkspace={activeWorkspace}
+        currentBranch={currentBranch}
+        onBranchSwitcherSelect={handleBranchSelect}
+        onBranchSwitcherCancel={closeBranchSwitcher}
         settingsOpen={settingsOpen}
         settingsSection={settingsSection ?? undefined}
         onCloseSettings={closeSettings}

@@ -1,6 +1,5 @@
 import { useCallback } from "react";
 import type { Dispatch, MutableRefObject } from "react";
-import * as Sentry from "@sentry/react";
 import type {
   AccessMode,
   AccountSnapshot,
@@ -12,6 +11,7 @@ import type {
 } from "../../../types";
 import {
   getAccountInfo,
+  compactThread as compactThreadService,
   sendUserMessage as sendUserMessageService,
   startReview as startReviewService,
   interruptTurn as interruptTurnService,
@@ -188,17 +188,6 @@ export function useThreadMessaging({
           });
         }
       }
-      Sentry.metrics.count("prompt_sent", 1, {
-        attributes: {
-          workspace_id: workspace.id,
-          thread_id: threadId,
-          has_images: images.length > 0 ? "true" : "false",
-          text_length: String(finalText.length),
-          model: resolvedModel ?? "unknown",
-          effort: resolvedEffort ?? "unknown",
-          collaboration_mode: sanitizedCollaborationMode ?? "unknown",
-        },
-      });
       const timestamp = Date.now();
       recordThreadActivity(workspace.id, threadId, timestamp);
       dispatch({
@@ -910,6 +899,37 @@ export function useThreadMessaging({
     ],
   );
 
+  const startCompact = useCallback(
+    async (_text: string) => {
+      if (!activeWorkspace) {
+        return;
+      }
+      const threadId = activeThreadId ?? (await ensureThreadForActiveWorkspace());
+      if (!threadId) {
+        return;
+      }
+      try {
+        await compactThreadService(activeWorkspace.id, threadId);
+      } catch (error) {
+        pushThreadErrorMessage(
+          threadId,
+          error instanceof Error
+            ? error.message
+            : "Failed to start context compaction.",
+        );
+      } finally {
+        safeMessageActivity();
+      }
+    },
+    [
+      activeThreadId,
+      activeWorkspace,
+      ensureThreadForActiveWorkspace,
+      pushThreadErrorMessage,
+      safeMessageActivity,
+    ],
+  );
+
   return {
     interruptTurn,
     sendUserMessage,
@@ -917,6 +937,7 @@ export function useThreadMessaging({
     startFork,
     startReview,
     startResume,
+    startCompact,
     startApps,
     startMcp,
     startStatus,

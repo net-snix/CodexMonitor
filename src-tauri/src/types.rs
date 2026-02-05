@@ -12,6 +12,10 @@ pub(crate) struct GitFileStatus {
 pub(crate) struct GitFileDiff {
     pub(crate) path: String,
     pub(crate) diff: String,
+    #[serde(default, rename = "oldLines")]
+    pub(crate) old_lines: Option<Vec<String>>,
+    #[serde(default, rename = "newLines")]
+    pub(crate) new_lines: Option<Vec<String>>,
     #[serde(default, rename = "isBinary")]
     pub(crate) is_binary: bool,
     #[serde(default, rename = "isImage")]
@@ -31,6 +35,10 @@ pub(crate) struct GitCommitDiff {
     pub(crate) path: String,
     pub(crate) status: String,
     pub(crate) diff: String,
+    #[serde(default, rename = "oldLines")]
+    pub(crate) old_lines: Option<Vec<String>>,
+    #[serde(default, rename = "newLines")]
+    pub(crate) new_lines: Option<Vec<String>>,
     #[serde(default, rename = "isBinary")]
     pub(crate) is_binary: bool,
     #[serde(default, rename = "isImage")]
@@ -444,6 +452,11 @@ pub(crate) struct AppSettings {
     #[serde(default = "default_preload_git_diffs", rename = "preloadGitDiffs")]
     pub(crate) preload_git_diffs: bool,
     #[serde(
+        default = "default_git_diff_ignore_whitespace_changes",
+        rename = "gitDiffIgnoreWhitespaceChanges"
+    )]
+    pub(crate) git_diff_ignore_whitespace_changes: bool,
+    #[serde(
         default = "default_system_notifications_enabled",
         rename = "systemNotificationsEnabled"
     )]
@@ -459,15 +472,17 @@ pub(crate) struct AppSettings {
     )]
     pub(crate) collaboration_modes_enabled: bool,
     #[serde(
-        default = "default_experimental_steer_enabled",
-        rename = "experimentalSteerEnabled"
+        default = "default_steer_enabled",
+        rename = "steerEnabled",
+        alias = "experimentalSteerEnabled"
     )]
-    pub(crate) experimental_steer_enabled: bool,
+    pub(crate) steer_enabled: bool,
     #[serde(
-        default = "default_experimental_unified_exec_enabled",
-        rename = "experimentalUnifiedExecEnabled"
+        default = "default_unified_exec_enabled",
+        rename = "unifiedExecEnabled",
+        alias = "experimentalUnifiedExecEnabled"
     )]
-    pub(crate) experimental_unified_exec_enabled: bool,
+    pub(crate) unified_exec_enabled: bool,
     #[serde(
         default = "default_experimental_apps_enabled",
         rename = "experimentalAppsEnabled"
@@ -656,6 +671,10 @@ fn default_preload_git_diffs() -> bool {
     true
 }
 
+fn default_git_diff_ignore_whitespace_changes() -> bool {
+    false
+}
+
 fn default_experimental_collab_enabled() -> bool {
     false
 }
@@ -664,12 +683,12 @@ fn default_collaboration_modes_enabled() -> bool {
     true
 }
 
-fn default_experimental_steer_enabled() -> bool {
-    false
+fn default_steer_enabled() -> bool {
+    true
 }
 
-fn default_experimental_unified_exec_enabled() -> bool {
-    false
+fn default_unified_exec_enabled() -> bool {
+    true
 }
 
 fn default_experimental_apps_enabled() -> bool {
@@ -830,10 +849,11 @@ impl Default for AppSettings {
             notification_sounds_enabled: true,
             system_notifications_enabled: true,
             preload_git_diffs: default_preload_git_diffs(),
+            git_diff_ignore_whitespace_changes: default_git_diff_ignore_whitespace_changes(),
             experimental_collab_enabled: false,
             collaboration_modes_enabled: true,
-            experimental_steer_enabled: false,
-            experimental_unified_exec_enabled: false,
+            steer_enabled: true,
+            unified_exec_enabled: true,
             experimental_apps_enabled: false,
             personality: default_personality(),
             dictation_enabled: false,
@@ -935,8 +955,10 @@ mod tests {
         assert!(settings.notification_sounds_enabled);
         assert!(settings.system_notifications_enabled);
         assert!(settings.preload_git_diffs);
+        assert!(!settings.git_diff_ignore_whitespace_changes);
         assert!(settings.collaboration_modes_enabled);
-        assert!(!settings.experimental_steer_enabled);
+        assert!(settings.steer_enabled);
+        assert!(settings.unified_exec_enabled);
         assert!(!settings.experimental_apps_enabled);
         assert_eq!(settings.personality, "friendly");
         assert!(!settings.dictation_enabled);
