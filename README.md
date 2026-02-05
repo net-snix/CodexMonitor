@@ -8,11 +8,11 @@ CodexMonitor is a macOS Tauri app for orchestrating multiple Codex agents across
 
 Strikethrough means the item has landed in origin.
 
-- ~~Account switching: log in and out of your accounts manually every time.~~
+- ~~Account switching: log in and out of your accounts manually.~~
 - Easy account switching: account saving + one-click switch between saved accounts.
 - Auto switch: toggle to switch to another saved account when Codex usage limits are reached.
-- ~~Dim mode~~
-- ~~Usage limit toggle shows remaining instead of used~~
+- ~~Dim mode.~~
+- ~~Usage limit toggle shows remaining instead of used.~~
 
 ## Features
 
