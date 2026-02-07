@@ -1570,6 +1570,7 @@ export function SettingsView({
                     <option value="light">Light</option>
                     <option value="dark">Dark</option>
                     <option value="dim">Dim</option>
+                    <option value="xp">Windows XP</option>
                   </select>
                 </div>
                 <div className="settings-toggle-row">

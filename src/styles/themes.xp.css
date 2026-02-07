@@ -1,0 +1,2651 @@
+/* ═══════════════════════════════════════════════════════
+   Windows XP Luna Blue Theme
+   Authentic recreation of the classic Windows XP visual style
+   Reference: XP.css (github.com/botoxparty/XP.css)
+   ═══════════════════════════════════════════════════════ */
+
+@font-face {
+  font-family: "MS Sans Serif XP";
+  src:
+    url("../../XP.css/gui/fonts/converted/ms_sans_serif.woff2") format("woff2"),
+    url("../../XP.css/gui/fonts/converted/ms_sans_serif.woff") format("woff");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "MS Sans Serif XP";
+  src:
+    url("../../XP.css/gui/fonts/converted/ms_sans_serif_bold.woff2") format("woff2"),
+    url("../../XP.css/gui/fonts/converted/ms_sans_serif_bold.woff") format("woff");
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+}
+
+:root[data-theme="xp"] {
+  color-scheme: light;
+
+  /* ── Text hierarchy (black-based for warm beige backgrounds) ── */
+  --text-primary: #000000;
+  --text-strong: #000000;
+  --text-emphasis: rgba(0, 0, 0, 0.92);
+  --text-stronger: rgba(0, 0, 0, 0.87);
+  --text-quiet: rgba(0, 0, 0, 0.75);
+  --text-muted: rgba(0, 0, 0, 0.62);
+  --text-subtle: rgba(0, 0, 0, 0.52);
+  --text-faint: rgba(0, 0, 0, 0.40);
+  --text-fainter: rgba(0, 0, 0, 0.33);
+  --text-dim: rgba(0, 0, 0, 0.25);
+
+  /* ── Surfaces (warm beige #ECE9D8 — the signature XP color) ── */
+  --surface-sidebar: #ece9d8;
+  --surface-sidebar-opaque: #ece9d8;
+  --surface-topbar: linear-gradient(
+    180deg,
+    rgba(9, 151, 255, 1) 0%,
+    rgba(0, 83, 238, 1) 8%,
+    rgba(0, 80, 238, 1) 40%,
+    rgba(0, 102, 255, 1) 88%,
+    rgba(0, 102, 255, 1) 93%,
+    rgba(0, 91, 255, 1) 95%,
+    rgba(0, 61, 215, 1) 96%,
+    rgba(0, 61, 215, 1) 100%
+  );
+  --surface-right-panel: #ece9d8;
+  --surface-composer: #ece9d8;
+  --surface-messages: #ece9d8;
+  --surface-card: rgba(255, 255, 255, 0.82);
+  --surface-card-strong: #ffffff;
+  --surface-card-muted: #f5f3eb;
+  --surface-item: #f5f3eb;
+  --surface-control: #ece9d8;
+  --surface-control-hover: #e3dfd1;
+  --surface-control-disabled: #ddd9cc;
+  --surface-hover: rgba(49, 106, 197, 0.12);
+  --surface-active: rgba(49, 106, 197, 0.25);
+  --surface-approval: #f5f3eb;
+  --surface-debug: #f1efe2;
+  --surface-command: #f5f3eb;
+  --surface-diff-card: #f5f3eb;
+  --surface-bubble: #ffffff;
+  --surface-bubble-user: rgba(49, 106, 197, 0.14);
+  --surface-context-core: #f5f3eb;
+  --surface-popover: #ece9d8;
+  --surface-strong: #f5f3eb;
+  --surface-1: #ffffff;
+  --surface-quiet: #ece9d8;
+
+  /* ── Review surfaces ── */
+  --surface-review: rgba(255, 202, 223, 0.38);
+  --border-review: rgba(215, 102, 148, 0.5);
+  --surface-review-active: rgba(255, 195, 219, 0.48);
+  --text-review-active: rgba(112, 34, 71, 0.95);
+  --surface-review-done: rgba(176, 236, 210, 0.55);
+  --text-review-done: rgba(14, 94, 60, 0.95);
+
+  /* ── Borders (XP 3D border palette) ── */
+  --border-subtle: #d5d2c8;
+  --border-muted: #aca899;
+  --border-strong: #716f64;
+  --border-stronger: #515046;
+  --border-quiet: #808080;
+  --border-accent: #316ac5;
+  --border-accent-soft: rgba(49, 106, 197, 0.38);
+
+  /* ── Accent & status ── */
+  --text-accent: #316ac5;
+  --text-danger: #cc0000;
+  --text-success: #008000;
+  --message-link-color: #0066cc;
+  --shadow-accent: rgba(0, 0, 0, 0.22);
+  --status-success: #008000;
+  --status-warning: #cc8800;
+  --status-error: #cc0000;
+  --status-unknown: #808080;
+  --select-caret: #000000;
+  --main-topbar-height: 56px;
+  --xp-title-controls-offset: 20px;
+  --xp-left-header-offset-y: 35px;
+  --xp-right-header-offset-y: 35px;
+  --xp-sidebar-corner-inset: 12px;
+  --xp-sidebar-corner-bottom: 8px;
+}
+
+/* ── Reduced transparency overrides ── */
+:root[data-theme="xp"] .app.reduced-transparency {
+  --surface-sidebar: #ece9d8;
+  --surface-sidebar-opaque: #ece9d8;
+  --surface-right-panel: #ece9d8;
+  --surface-composer: #ece9d8;
+  --surface-messages: #ece9d8;
+  --surface-card: #ffffff;
+  --surface-card-strong: #ffffff;
+  --surface-card-muted: #f5f3eb;
+  --surface-item: #f5f3eb;
+  --surface-control: #ece9d8;
+  --surface-control-hover: #e3dfd1;
+  --surface-control-disabled: #ddd9cc;
+  --surface-hover: rgba(49, 106, 197, 0.18);
+  --surface-active: rgba(49, 106, 197, 0.3);
+  --surface-approval: #f5f3eb;
+  --surface-debug: #f1efe2;
+  --surface-command: #f5f3eb;
+  --surface-diff-card: #f5f3eb;
+  --surface-bubble: #ffffff;
+  --surface-bubble-user: rgba(49, 106, 197, 0.2);
+  --surface-context-core: #f5f3eb;
+  --surface-popover: #ece9d8;
+}
+
+/* ═══════════════════════════════════════════════════════
+   App Background — XP Desktop
+   Blue title-bar band spans full window width at top,
+   warm beige content below.
+   ═══════════════════════════════════════════════════════ */
+:root[data-theme="xp"] .app {
+  background: #ece9d8;
+  border-top-left-radius: 8px;
+  border-top-right-radius: 8px;
+  box-shadow:
+    inset -1px -1px #00138c,
+    inset 1px 1px #0831d9,
+    inset -2px -2px #001ea0,
+    inset 2px 2px #166aee,
+    inset -3px -3px #003bda,
+    inset 3px 3px #0855dd;
+}
+
+/* ═══════════════════════════════════════════════════════
+   FULL-WIDTH XP TITLE BAR
+   The sidebar and right panel each get a ::before pseudo
+   that paints the XP title bar gradient over their top area,
+   creating a seamless blue band across the entire window.
+   ═══════════════════════════════════════════════════════ */
+
+/* Sidebar — paint XP title bar gradient over the top padding area.
+   Height matches the main topbar's visual bottom edge. */
+:root[data-theme="xp"] .sidebar::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: -1px;
+  height: calc(var(--main-topbar-height) - 1px);
+  z-index: 1;
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    rgba(9, 151, 255, 1) 0%,
+    rgba(0, 83, 238, 1) 8%,
+    rgba(0, 80, 238, 1) 40%,
+    rgba(0, 102, 255, 1) 88%,
+    rgba(0, 102, 255, 1) 93%,
+    rgba(0, 91, 255, 1) 95%,
+    rgba(0, 61, 215, 1) 96%,
+    rgba(0, 61, 215, 1) 100%
+  );
+  border-bottom: 1px solid #003c74;
+  border-top-left-radius: 8px;
+}
+
+/* Push sidebar content down so it's not cut off by the title bar.
+   Extra padding-top clears the traffic lights + positions the
+   sidebar header centered within the blue title band. */
+:root[data-theme="xp"] .sidebar {
+  padding-top: var(--xp-title-controls-offset);
+}
+
+/* Ensure sidebar content sits above the blue band */
+:root[data-theme="xp"] .sidebar-header,
+:root[data-theme="xp"] .sidebar-body,
+:root[data-theme="xp"] .sidebar-footer,
+:root[data-theme="xp"] .sidebar-corner-actions {
+  position: relative;
+  z-index: 2;
+}
+
+:root[data-theme="xp"] .sidebar-header {
+  margin-top: var(--xp-left-header-offset-y);
+}
+
+/* Bottom cluster handled as one unit in XP theme. */
+:root[data-theme="xp"] .sidebar {
+  padding-bottom: 0;
+}
+
+:root[data-theme="xp"] .sidebar-bottom-cluster {
+  margin-top: auto;
+  margin-left: calc(var(--xp-sidebar-corner-inset) - var(--sidebar-padding));
+  margin-right: calc(var(--xp-sidebar-corner-inset) - var(--sidebar-padding));
+  margin-bottom: var(--xp-sidebar-corner-bottom);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+:root[data-theme="xp"] .sidebar-footer {
+  margin: 0;
+}
+
+/* Corner actions align with usage footer inside the bottom cluster. */
+:root[data-theme="xp"] .sidebar-corner-actions {
+  position: static;
+  left: auto;
+  bottom: auto;
+}
+
+/* Right panel — paint XP title bar gradient over the top.
+   Height matches the main topbar's visual bottom edge. */
+:root[data-theme="xp"] .right-panel::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -1px;
+  right: 0;
+  height: calc(var(--main-topbar-height) - 1px);
+  z-index: 1;
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    rgba(9, 151, 255, 1) 0%,
+    rgba(0, 83, 238, 1) 8%,
+    rgba(0, 80, 238, 1) 40%,
+    rgba(0, 102, 255, 1) 88%,
+    rgba(0, 102, 255, 1) 93%,
+    rgba(0, 91, 255, 1) 95%,
+    rgba(0, 61, 215, 1) 96%,
+    rgba(0, 61, 215, 1) 100%
+  );
+  border-bottom: 1px solid #003c74;
+  border-top-right-radius: 8px;
+}
+
+/* Right panel needs position:relative for ::before to work.
+   Add top padding so content sits within the blue band. */
+:root[data-theme="xp"] .right-panel {
+  position: relative;
+  padding-top: 6px;
+  border-left: none;
+}
+
+/* Right panel content sits above the blue band AND the drag-strip (z-index: 11) */
+:root[data-theme="xp"] .right-panel-top,
+:root[data-theme="xp"] .right-panel-bottom,
+:root[data-theme="xp"] .right-panel-divider {
+  position: relative;
+  z-index: 12;
+}
+
+/* Diff panel header — white text on the blue title band. */
+:root[data-theme="xp"] .git-panel-header {
+  color: #ffffff;
+  text-shadow: 1px 1px #0f1089;
+  padding-top: 0;
+  margin-top: var(--xp-right-header-offset-y);
+  min-height: 28px;
+}
+
+/* Align right-panel controls into the same blue title-band zone as left sidebar. */
+:root[data-theme="xp"] .diff-panel {
+  padding-top: 4px;
+}
+
+/* In XP mode, keep the top controls on the title-band even with reduced transparency. */
+:root[data-theme="xp"] .app.reduced-transparency .diff-panel {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+}
+
+/* Remove rounded beige wrapper behind top-right panel tabs. */
+:root[data-theme="xp"] .git-panel-header .panel-tabs {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0 0 1px;
+  gap: 0;
+  box-shadow: none;
+}
+
+/* XP tab geometry and classic light button styling (non-blue). */
+:root[data-theme="xp"] .git-panel-header .panel-tab {
+  position: relative;
+  margin-left: -1px;
+  margin-right: 2px;
+  padding: 0 12px 3px;
+  min-height: 24px;
+  border-radius: 3px 3px 0 0;
+  border: 1px solid #7f9db9;
+  background: linear-gradient(180deg, #ffffff 0%, #ecebe5 86%, #d8d0c4 100%);
+  color: #1d2f4f;
+  text-shadow: none;
+  box-shadow: none;
+}
+
+:root[data-theme="xp"] .git-panel-header .panel-tab:hover:not(:disabled) {
+  border-color: #7f9db9;
+  background: linear-gradient(180deg, #ffffff 0%, #f2efe7 86%, #ddd6c9 100%);
+  box-shadow: inset -1px 1px #fff0cf, inset 1px 2px #fdd889, inset -2px 2px #fbc761, inset 2px -2px #e5a01a;
+  color: #132948;
+}
+
+:root[data-theme="xp"] .git-panel-header .panel-tab.is-active {
+  background: linear-gradient(180deg, #cdcac3 0%, #e3e3db 8%, #e5e5de 94%, #f2f2f1 100%);
+  border-color: #7f9db9;
+  border-bottom: 1px solid #d5d2c8;
+  margin-right: -1px;
+  box-shadow: none;
+  color: #0f2340;
+}
+
+/* Panel tab icons: dark on light XP buttons. */
+:root[data-theme="xp"] .git-panel-header .panel-tab .panel-tab-icon svg {
+  width: 13px;
+  height: 13px;
+  color: #1d2f4f;
+  stroke: #1d2f4f;
+  fill: none;
+  opacity: 1;
+}
+
+:root[data-theme="xp"] .git-panel-header .panel-tab .panel-tab-icon svg * {
+  stroke: #1d2f4f;
+  fill: none;
+  opacity: 1;
+}
+
+/* Ensure post-header status rows clear the blue/beige seam. */
+:root[data-theme="xp"] .diff-status,
+:root[data-theme="xp"] .git-log-sync,
+:root[data-theme="xp"] .diff-branch-row {
+  margin-top: 8px;
+}
+
+:root[data-theme="xp"] .git-panel-title {
+  color: #ffffff;
+}
+
+:root[data-theme="xp"] .git-panel-title-button {
+  color: rgba(255, 255, 255, 0.85);
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+:root[data-theme="xp"] .git-panel-title-button:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* Right panel top-area buttons — white on blue.
+   Exclude panel-tab buttons; they have dedicated XP tab styling above. */
+:root[data-theme="xp"] .git-panel-header button:not(.panel-tab) {
+  color: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.25);
+  background: #0050ee;
+  box-shadow: none;
+}
+
+:root[data-theme="xp"] .git-panel-header button:not(.panel-tab):hover {
+  background: #2070ff;
+  box-shadow: none;
+  transform: none;
+}
+
+:root[data-theme="xp"] .git-panel-header button:not(.panel-tab) svg {
+  color: #ffffff;
+  stroke: #ffffff;
+}
+
+/* Git panel select/dropdown in the blue band */
+:root[data-theme="xp"] .git-panel-select-input {
+  color: #ffffff;
+  background-color: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.25);
+  border-radius: 3px;
+}
+
+:root[data-theme="xp"] .git-panel-select-icon {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+:root[data-theme="xp"] .git-panel-actions button {
+  color: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.25);
+  background: #0050ee;
+  box-shadow: none;
+}
+
+:root[data-theme="xp"] .git-panel-actions button:hover {
+  background: #2070ff;
+  box-shadow: none;
+  transform: none;
+}
+
+:root[data-theme="xp"] .git-panel-actions button svg {
+  color: #ffffff;
+  stroke: #ffffff;
+}
+
+/* Right header file count ("X files") */
+:root[data-theme="xp"] .git-panel-header .file-tree-count {
+  color: #ffffff;
+  text-shadow: 1px 1px #0f1089;
+}
+
+/* File tree count should read as dark text on the light XP control surface. */
+:root[data-theme="xp"] .file-tree-panel .git-panel-header .file-tree-count {
+  color: #000000;
+  text-shadow: none;
+}
+
+/* File tree expand/retract toggle: classic light XP button, not blue. */
+:root[data-theme="xp"] .file-tree-panel .git-panel-header .file-tree-toggle {
+  border: 1px solid #7f9db9;
+  background: linear-gradient(180deg, #ffffff 0%, #ecebe5 86%, #d8d0c4 100%);
+  color: #1d2f4f;
+  box-shadow: none;
+}
+
+:root[data-theme="xp"] .file-tree-panel .git-panel-header .file-tree-toggle:hover:not(:disabled) {
+  border-color: #7f9db9;
+  background: linear-gradient(180deg, #ffffff 0%, #f2efe7 86%, #ddd6c9 100%);
+  box-shadow: inset -1px 1px #fff0cf, inset 1px 2px #fdd889, inset -2px 2px #fbc761, inset 2px -2px #e5a01a;
+  transform: none;
+}
+
+:root[data-theme="xp"] .file-tree-panel .git-panel-header .file-tree-toggle:active:not(:disabled) {
+  background: linear-gradient(180deg, #cdcac3 0%, #e3e3db 8%, #e5e5de 94%, #f2f2f1 100%);
+  box-shadow: none;
+}
+
+:root[data-theme="xp"] .file-tree-panel .git-panel-header .file-tree-toggle svg {
+  color: #1d2f4f;
+  stroke: #1d2f4f;
+}
+
+/* Sidebar header text */
+:root[data-theme="xp"] .sidebar-header {
+  text-shadow: none;
+}
+
+/* ═══════════════════════════════════════════════════════
+   TRAFFIC LIGHTS — XP-styled backdrop for macOS controls
+   The native traffic lights (circles) sit on the drag-strip.
+   We add a subtle XP-style recessed pill behind them so
+   they look integrated into the blue title bar.
+   ═══════════════════════════════════════════════════════ */
+:root[data-theme="xp"] .drag-strip {
+  z-index: 11;
+}
+
+/* Keep the entire topbar above the drag strip.
+   Child z-index cannot escape the parent's stacking context. */
+:root[data-theme="xp"] .main-topbar {
+  position: relative;
+  z-index: 13;
+}
+
+:root[data-theme="xp"] .drag-strip::before {
+  content: "";
+  position: absolute;
+  top: 6px;
+  left: 5px;
+  width: 66px;
+  height: 18px;
+  z-index: 12;
+  pointer-events: none;
+  border-radius: 8px;
+  /* Recessed XP-style pill behind the three circles */
+  background: rgba(0, 40, 140, 0.35);
+  border: 1px solid rgba(0, 20, 100, 0.3);
+  box-shadow:
+    inset 0 1px 2px rgba(0, 0, 0, 0.2),
+    0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+/* ═══════════════════════════════════════════════════════
+   XP System Font: Tahoma
+   ═══════════════════════════════════════════════════════ */
+:root[data-theme="xp"] .app,
+:root[data-theme="xp"] .app button,
+:root[data-theme="xp"] .app input,
+:root[data-theme="xp"] .app select,
+:root[data-theme="xp"] .app textarea {
+  font-family: "MS Sans Serif XP", Tahoma, "Trebuchet MS", Verdana, sans-serif;
+}
+
+:root[data-theme="xp"] .main-topbar,
+:root[data-theme="xp"] .settings-titlebar,
+:root[data-theme="xp"] .git-panel-header {
+  font-family: "Trebuchet MS", "MS Sans Serif XP", Tahoma, Verdana, sans-serif;
+}
+
+/* ═══════════════════════════════════════════════════════
+   BUTTONS — Base Reset
+   Reset all buttons to minimal, then opt-in to XP style.
+   This prevents icon-only buttons from getting the gradient.
+   ═══════════════════════════════════════════════════════ */
+:root[data-theme="xp"] button {
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 400;
+  transition: none;
+}
+
+:root[data-theme="xp"] button:hover:not(:disabled) {
+  transform: none;
+}
+
+/* ── XP 3D Raised Button ──
+   Applied to text-bearing buttons: .primary, .secondary,
+   and any button that is NOT an icon-only pattern.
+   From XP.css: gradient #fff→#ecebe5→#d8d0c4, border #003c74
+   ═══════════════════════════════════════════════════════ */
+:root[data-theme="xp"] .primary,
+:root[data-theme="xp"] .secondary {
+  border: 1px solid #003c74;
+  padding: 4px 12px;
+  color: #000000;
+  background: linear-gradient(180deg, #ffffff 0%, #ecebe5 86%, #d8d0c4 100%);
+  box-shadow: none;
+}
+
+:root[data-theme="xp"] .primary:hover:not(:disabled),
+:root[data-theme="xp"] .secondary:hover:not(:disabled) {
+  box-shadow: inset -1px 1px #fff0cf, inset 1px 2px #fdd889, inset -2px 2px #fbc761, inset 2px -2px #e5a01a;
+  background: linear-gradient(180deg, #ffffff 0%, #ecebe5 86%, #d8d0c4 100%);
+}
+
+:root[data-theme="xp"] .primary:active:not(:disabled),
+:root[data-theme="xp"] .secondary:active:not(:disabled),
+:root[data-theme="xp"] .primary[aria-pressed="true"],
+:root[data-theme="xp"] .secondary[aria-pressed="true"] {
+  box-shadow: none;
+  background: linear-gradient(180deg, #cdcac3 0%, #e3e3db 8%, #e5e5de 94%, #f2f2f1 100%);
+}
+
+:root[data-theme="xp"] .primary:focus-visible,
+:root[data-theme="xp"] .secondary:focus-visible {
+  box-shadow: inset -1px 1px #cee7ff, inset 1px 2px #98b8ea, inset -2px 2px #bcd4f6, inset 1px -1px #89ade4, inset 2px -2px #89ade4;
+}
+
+/* Primary button — vivid XP blue */
+:root[data-theme="xp"] .primary {
+  color: #ffffff;
+  text-shadow: 0 -1px 0 rgba(0, 0, 0, 0.25);
+  background: linear-gradient(180deg, #4eb0ff 0%, #1a6ee2 50%, #0052d0 100%);
+}
+
+:root[data-theme="xp"] .primary:hover:not(:disabled) {
+  background: linear-gradient(180deg, #5cbcff 0%, #2a7aee 50%, #0060e0 100%);
+}
+
+:root[data-theme="xp"] .primary:active:not(:disabled) {
+  background: linear-gradient(180deg, #0052d0 0%, #1a6ee2 100%);
+}
+
+/* Ghost buttons with text — XP raised look */
+:root[data-theme="xp"] .ghost {
+  border: 1px solid #003c74;
+  border-radius: 3px;
+  color: #000000;
+  background: linear-gradient(180deg, #ffffff 0%, #ecebe5 86%, #d8d0c4 100%);
+  box-shadow: none;
+}
+
+:root[data-theme="xp"] .ghost:hover:not(:disabled) {
+  box-shadow: inset -1px 1px #fff0cf, inset 1px 2px #fdd889, inset -2px 2px #fbc761, inset 2px -2px #e5a01a;
+  background: linear-gradient(180deg, #ffffff 0%, #ecebe5 86%, #d8d0c4 100%);
+}
+
+:root[data-theme="xp"] .ghost:active:not(:disabled) {
+  box-shadow: none;
+  background: linear-gradient(180deg, #cdcac3 0%, #e3e3db 8%, #e5e5de 94%, #f2f2f1 100%);
+}
+
+/* Ghost icon-only buttons — transparent, icons visible */
+:root[data-theme="xp"] .ghost.icon-button {
+  background: transparent;
+  border: 1px solid transparent;
+  box-shadow: none;
+  color: var(--text-muted);
+}
+
+:root[data-theme="xp"] .ghost.icon-button:hover:not(:disabled) {
+  border: 1px solid #003c74;
+  background: linear-gradient(180deg, #ffffff 0%, #ecebe5 86%, #d8d0c4 100%);
+  box-shadow: none;
+}
+
+/* Ghost sidebar-account-delete (icon-only trash) */
+:root[data-theme="xp"] .ghost.sidebar-account-delete {
+  background: transparent;
+  border: 1px solid transparent;
+  box-shadow: none;
+  color: var(--text-muted);
+}
+
+:root[data-theme="xp"] .ghost.sidebar-account-delete:hover:not(:disabled) {
+  border: 1px solid #8b0000;
+  background: linear-gradient(180deg, #ffe0e0 0%, #f5c4c4 86%, #e8a0a0 100%);
+  box-shadow: none;
+  color: #cc0000;
+}
+
+/* Account cancel (icon-only X with secondary class) */
+:root[data-theme="xp"] .sidebar-account-cancel {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ═══════════════════════════════════════════════════════
+   ICON-ONLY BUTTONS — XP raised style with visible icons
+   These specific icon buttons get the XP gradient look.
+   ═══════════════════════════════════════════════════════ */
+
+/* Composer attach (image plus icon, left of input) */
+:root[data-theme="xp"] .composer-attach {
+  border: 1px solid #003c74;
+  border-radius: 3px;
+  color: #000000;
+  background: linear-gradient(180deg, #ffffff 0%, #ecebe5 86%, #d8d0c4 100%);
+  box-shadow: none;
+}
+
+:root[data-theme="xp"] .composer-attach:hover {
+  color: #000000;
+  box-shadow: inset -1px 1px #fff0cf, inset 1px 2px #fdd889, inset -2px 2px #fbc761, inset 2px -2px #e5a01a;
+}
+
+/* Composer action buttons (mic, send, stop — right of input) */
+:root[data-theme="xp"] .composer-action {
+  border: 1px solid #003c74;
+  border-radius: 3px;
+  color: #000000;
+  background: linear-gradient(180deg, #ffffff 0%, #ecebe5 86%, #d8d0c4 100%);
+  box-shadow: none;
+}
+
+:root[data-theme="xp"] .composer-action:hover {
+  color: #000000;
+  background: linear-gradient(180deg, #ffffff 0%, #ecebe5 86%, #d8d0c4 100%);
+  box-shadow: inset -1px 1px #fff0cf, inset 1px 2px #fdd889, inset -2px 2px #fbc761, inset 2px -2px #e5a01a;
+}
+
+:root[data-theme="xp"] .composer-action svg,
+:root[data-theme="xp"] .composer-attach svg {
+  color: #000000;
+  stroke: #000000;
+}
+
+/* Stop button — red tint */
+:root[data-theme="xp"] .composer-action.is-stop {
+  border-color: #8b0000;
+  background: linear-gradient(180deg, #ffe0e0 0%, #f5c4c4 86%, #e8a0a0 100%);
+}
+
+/* Diff row action buttons (stage, unstage, discard) */
+:root[data-theme="xp"] .diff-row-action {
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: transparent;
+  box-shadow: none;
+}
+
+:root[data-theme="xp"] .diff-row-action:hover {
+  border: 1px solid #003c74;
+  background: linear-gradient(180deg, #ffffff 0%, #ecebe5 86%, #d8d0c4 100%);
+  box-shadow: none;
+  transform: none;
+}
+
+:root[data-theme="xp"] .diff-row-action--discard:hover {
+  border-color: #8b0000;
+  background: linear-gradient(180deg, #ffe0e0 0%, #f5c4c4 86%, #e8a0a0 100%);
+}
+
+:root[data-theme="xp"] .diff-row-action--stage:hover {
+  border-color: #006400;
+  background: linear-gradient(180deg, #e0ffe0 0%, #c4f5c4 86%, #a0e8a0 100%);
+}
+
+/* Diff viewer header action (revert/discard in file headers) */
+:root[data-theme="xp"] .diff-viewer-header-action {
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: transparent;
+  box-shadow: none;
+}
+
+:root[data-theme="xp"] .diff-viewer-header-action:hover {
+  border: 1px solid #003c74;
+  background: linear-gradient(180deg, #ffffff 0%, #ecebe5 86%, #d8d0c4 100%);
+  box-shadow: none;
+  transform: none;
+}
+
+/* Tool group/inline toggles in messages */
+:root[data-theme="xp"] .tool-group-toggle,
+:root[data-theme="xp"] .tool-inline-toggle,
+:root[data-theme="xp"] .tool-inline-bar-toggle {
+  background: none;
+  border: none;
+  box-shadow: none;
+}
+
+:root[data-theme="xp"] .tool-group-toggle:hover,
+:root[data-theme="xp"] .tool-inline-toggle:hover {
+  transform: none;
+  box-shadow: none;
+}
+
+/* Group/workspace/worktree collapse toggles in sidebar */
+:root[data-theme="xp"] .group-toggle,
+:root[data-theme="xp"] .workspace-toggle,
+:root[data-theme="xp"] .worktree-toggle {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+:root[data-theme="xp"] .group-toggle:hover,
+:root[data-theme="xp"] .workspace-toggle:hover,
+:root[data-theme="xp"] .worktree-toggle:hover {
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: none;
+  transform: none;
+}
+
+/* File tree buttons */
+:root[data-theme="xp"] .file-tree-toggle,
+:root[data-theme="xp"] .file-tree-action {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+:root[data-theme="xp"] .file-tree-action:hover,
+:root[data-theme="xp"] .file-tree-toggle:hover {
+  background: var(--surface-control-hover);
+  box-shadow: none;
+  transform: none;
+}
+
+/* File tree search filter */
+:root[data-theme="xp"] .file-tree-search-filter {
+  background: transparent;
+  border: 1px solid transparent;
+  box-shadow: none;
+}
+
+:root[data-theme="xp"] .file-tree-search-filter.is-active {
+  background: #316ac5;
+  color: #ffffff;
+  border-color: #1e4c94;
+}
+
+/* File tree rows — XP Explorer style (white rows on beige, not blue) */
+:root[data-theme="xp"] .file-tree-row {
+  background: #ffffff;
+  border: 1px solid #aca899;
+  border-radius: 3px;
+  color: #000000;
+  box-shadow: none;
+}
+
+:root[data-theme="xp"] .file-tree-row:hover,
+:root[data-theme="xp"] .file-tree-row-wrap:hover .file-tree-row {
+  background: #e8e6d9;
+  border-color: #003c74;
+  color: #000000;
+}
+
+:root[data-theme="xp"] .file-tree-row.is-folder {
+  background: #f5f3eb;
+  border-color: #aca899;
+}
+
+:root[data-theme="xp"] .file-tree-row.is-folder:hover,
+:root[data-theme="xp"] .file-tree-row-wrap:hover .file-tree-row.is-folder {
+  background: #e8e6d9;
+  border-color: #003c74;
+}
+
+:root[data-theme="xp"] .file-tree-row svg {
+  color: #000000;
+  stroke: #000000;
+}
+
+:root[data-theme="xp"] .file-tree-chevron {
+  color: #000000;
+}
+
+/* Message copy button */
+:root[data-theme="xp"] .message-copy-button {
+  border: 1px solid #aca899;
+  background: linear-gradient(180deg, #ffffff 0%, #ecebe5 86%, #d8d0c4 100%);
+  color: #000000;
+  box-shadow: none;
+}
+
+:root[data-theme="xp"] .message-copy-button:hover {
+  box-shadow: inset -1px 1px #fff0cf, inset 1px 2px #fdd889, inset -2px 2px #fbc761, inset 2px -2px #e5a01a;
+  transform: none;
+}
+
+/* Thread pin icon */
+:root[data-theme="xp"] .thread-pin-icon {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+/* Home usage toggle */
+:root[data-theme="xp"] .home-usage-toggle,
+:root[data-theme="xp"] .home-usage-toggle-button {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+/* Prompt panel buttons */
+:root[data-theme="xp"] .prompt-action-menu,
+:root[data-theme="xp"] .prompt-section-add {
+  background: transparent;
+  border: 1px solid transparent;
+  box-shadow: none;
+}
+
+:root[data-theme="xp"] .prompt-action-menu:hover,
+:root[data-theme="xp"] .prompt-section-add:hover {
+  border: 1px solid #003c74;
+  background: linear-gradient(180deg, #ffffff 0%, #ecebe5 86%, #d8d0c4 100%);
+  box-shadow: none;
+  transform: none;
+}
+
+/* Open app action/toggle buttons */
+:root[data-theme="xp"] .open-app-action,
+:root[data-theme="xp"] .open-app-toggle {
+  /* These already get main-header-action styling from topbar rules */
+}
+
+/* Launch script buttons */
+:root[data-theme="xp"] .launch-script-run {
+  /* Already styled via main-header-action */
+}
+
+/* File preview action buttons */
+:root[data-theme="xp"] .file-preview-action,
+:root[data-theme="xp"] .file-preview-close {
+  background: transparent;
+  border: 1px solid transparent;
+  box-shadow: none;
+}
+
+:root[data-theme="xp"] .file-preview-action:hover,
+:root[data-theme="xp"] .file-preview-close:hover {
+  border: 1px solid #003c74;
+  background: linear-gradient(180deg, #ffffff 0%, #ecebe5 86%, #d8d0c4 100%);
+  box-shadow: none;
+  transform: none;
+}
+
+/* Settings icon buttons and close */
+:root[data-theme="xp"] .settings-close,
+:root[data-theme="xp"] .settings-icon-button,
+:root[data-theme="xp"] .settings-button-compact,
+:root[data-theme="xp"] .settings-scale-reset {
+  background: transparent;
+  border: 1px solid transparent;
+  box-shadow: none;
+}
+
+:root[data-theme="xp"] .settings-close:hover,
+:root[data-theme="xp"] .settings-icon-button:hover,
+:root[data-theme="xp"] .settings-button-compact:hover,
+:root[data-theme="xp"] .settings-scale-reset:hover {
+  border: 1px solid #003c74;
+  background: linear-gradient(180deg, #ffffff 0%, #ecebe5 86%, #d8d0c4 100%);
+  box-shadow: none;
+  transform: none;
+}
+
+/* Sidebar error dismiss */
+:root[data-theme="xp"] .sidebar-error-dismiss {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+/* Git panel buttons */
+:root[data-theme="xp"] .git-root-button--icon {
+  background: transparent;
+  border: 1px solid transparent;
+  box-shadow: none;
+}
+
+:root[data-theme="xp"] .git-root-button--icon:hover {
+  border: 1px solid #003c74;
+  background: linear-gradient(180deg, #ffffff 0%, #ecebe5 86%, #d8d0c4 100%);
+  box-shadow: none;
+  transform: none;
+}
+
+/* Diff view toggle buttons */
+:root[data-theme="xp"] .diff-view-toggle-button {
+  border: 1px solid #003c74;
+  background: linear-gradient(180deg, #ffffff 0%, #ecebe5 86%, #d8d0c4 100%);
+  box-shadow: none;
+  color: #000000;
+}
+
+:root[data-theme="xp"] .diff-view-toggle-button:hover {
+  box-shadow: inset -1px 1px #fff0cf, inset 1px 2px #fdd889, inset -2px 2px #fbc761, inset 2px -2px #e5a01a;
+  transform: none;
+}
+
+/* PR timeline button */
+:root[data-theme="xp"] .diff-viewer-pr-timeline-button,
+:root[data-theme="xp"] .diff-viewer-pr-jump {
+  border: 1px solid #003c74;
+  background: linear-gradient(180deg, #ffffff 0%, #ecebe5 86%, #d8d0c4 100%);
+  box-shadow: none;
+  color: #000000;
+  padding: 4px 12px;
+}
+
+:root[data-theme="xp"] .diff-viewer-pr-timeline-button:hover,
+:root[data-theme="xp"] .diff-viewer-pr-jump:hover {
+  box-shadow: inset -1px 1px #fff0cf, inset 1px 2px #fdd889, inset -2px 2px #fbc761, inset 2px -2px #e5a01a;
+  transform: none;
+}
+
+/* Sidebar account row action button (in account popup, beige area) */
+:root[data-theme="xp"] .sidebar-account-row-action {
+  border: 1px solid #003c74;
+  background: linear-gradient(180deg, #ffffff 0%, #ecebe5 86%, #d8d0c4 100%);
+  color: #000000;
+  box-shadow: none;
+}
+
+:root[data-theme="xp"] .sidebar-account-row-action:hover {
+  box-shadow: inset -1px 1px #fff0cf, inset 1px 2px #fdd889, inset -2px 2px #fbc761, inset 2px -2px #e5a01a;
+  transform: none;
+}
+
+/* Sidebar account warning action */
+:root[data-theme="xp"] .sidebar-account-warning-action {
+  border: 1px solid #003c74;
+  background: linear-gradient(180deg, #ffffff 0%, #ecebe5 86%, #d8d0c4 100%);
+  color: #000000;
+  box-shadow: none;
+}
+
+/* Sidebar account add button (in popup, beige area) */
+:root[data-theme="xp"] .sidebar-account-add-button {
+  border: 1px solid #003c74;
+  background: linear-gradient(180deg, #ffffff 0%, #ecebe5 86%, #d8d0c4 100%);
+  color: #000000;
+  box-shadow: none;
+  padding: 4px 12px;
+}
+
+:root[data-theme="xp"] .sidebar-account-add-button:hover {
+  box-shadow: inset -1px 1px #fff0cf, inset 1px 2px #fdd889, inset -2px 2px #fbc761, inset 2px -2px #e5a01a;
+  transform: none;
+}
+
+/* Sidebar corner action buttons (account, settings, debug — bottom left) */
+:root[data-theme="xp"] .sidebar-corner-button {
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 3px;
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: none;
+  padding: 6px;
+}
+
+:root[data-theme="xp"] .sidebar-corner-button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.22);
+  box-shadow: none;
+}
+
+:root[data-theme="xp"] .sidebar-corner-button svg {
+  color: #ffffff;
+  stroke: #ffffff;
+}
+
+/* Sidebar title add button (+) */
+:root[data-theme="xp"] .sidebar-title-add {
+  color: rgba(255, 255, 255, 0.75);
+  border: none;
+  background: transparent;
+  box-shadow: none;
+}
+
+:root[data-theme="xp"] .sidebar-title-add:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: none;
+}
+
+/* Sidebar search toggle */
+:root[data-theme="xp"] .sidebar-search-toggle {
+  color: rgba(255, 255, 255, 0.75);
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  line-height: 0;
+}
+
+:root[data-theme="xp"] .sidebar-search-toggle svg {
+  display: block;
+}
+
+:root[data-theme="xp"] .sidebar-search-toggle:hover,
+:root[data-theme="xp"] .sidebar-search-toggle.is-active {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.15);
+  box-shadow: none;
+}
+
+/* Sidebar search clear (x) */
+:root[data-theme="xp"] .sidebar-search-clear,
+:root[data-theme="xp"] .sidebar-search-clear:hover {
+  color: rgba(255, 255, 255, 0.7);
+  border: none;
+  background: transparent;
+  box-shadow: none;
+}
+
+/* Sidebar header button */
+:root[data-theme="xp"] .sidebar-header button {
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.10);
+  box-shadow: none;
+}
+
+:root[data-theme="xp"] .sidebar-header button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.20);
+  box-shadow: none;
+}
+
+/* Composer attachment remove (x) */
+:root[data-theme="xp"] .composer-attachment-remove {
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  color: rgba(0, 0, 0, 0.5);
+}
+
+:root[data-theme="xp"] .composer-attachment-remove:hover {
+  color: #000000;
+  background: transparent;
+  box-shadow: none;
+}
+
+/* Composer queue menu (…) */
+:root[data-theme="xp"] .composer-queue-menu {
+  border: none;
+  background: transparent;
+  box-shadow: none;
+}
+
+/* ═══════════════════════════════════════════════════════
+   INPUTS — Sunken 3D Fields (from XP.css: border #7f9db9)
+   ═══════════════════════════════════════════════════════ */
+:root[data-theme="xp"] input:not([type="range"]),
+:root[data-theme="xp"] select,
+:root[data-theme="xp"] textarea {
+  border: 1px solid #7f9db9;
+  border-radius: 0;
+  color: #000000;
+  background: #ffffff;
+  box-shadow: none;
+}
+
+:root[data-theme="xp"] input:not([type="range"]):focus,
+:root[data-theme="xp"] select:focus,
+:root[data-theme="xp"] textarea:focus {
+  outline: none;
+  border-color: #316ac5;
+  box-shadow: inset 2px 2px white, inset -2px -2px white;
+}
+
+:root[data-theme="xp"] input[type="text"],
+:root[data-theme="xp"] input[type="password"],
+:root[data-theme="xp"] input[type="email"],
+:root[data-theme="xp"] select {
+  min-height: 23px;
+}
+
+:root[data-theme="xp"] select:not(.git-panel-select-input) {
+  appearance: none;
+  background-repeat: no-repeat;
+  background-position: right 1px center;
+  background-size: 15px 21px;
+  background-image: url("../../XP.css/themes/XP/icon/dropdown.svg");
+  padding-right: 22px;
+}
+
+:root[data-theme="xp"] select:not(.git-panel-select-input):hover {
+  background-image: url("../../XP.css/themes/XP/icon/dropdown-hover.svg");
+}
+
+:root[data-theme="xp"] select:not(.git-panel-select-input):active {
+  background-image: url("../../XP.css/themes/XP/icon/dropdown-active.svg");
+}
+
+:root[data-theme="xp"] input::placeholder,
+:root[data-theme="xp"] textarea::placeholder {
+  color: #808080;
+}
+
+/* Text selection — XP blue */
+:root[data-theme="xp"] input::selection,
+:root[data-theme="xp"] textarea::selection {
+  background: #316ac5;
+  color: #ffffff;
+}
+
+/* ═══════════════════════════════════════════════════════
+   SIDEBAR — XP Explorer Task Pane
+   Locally re-scope CSS variables for light-on-dark text.
+   Remove modern rounded corners; use XP straight edges.
+   ═══════════════════════════════════════════════════════ */
+:root[data-theme="xp"] .sidebar,
+:root[data-theme="xp"] .settings-sidebar {
+  border-right: none;
+  box-shadow: none;
+}
+
+/* Sidebar header sits at the bottom of the title bar blue band.
+   The 36px padding-top naturally positions it below traffic lights. */
+
+/* Locally re-scope sidebar vars for egg-white background. */
+:root[data-theme="xp"] .sidebar {
+  color: #000000;
+  --text-primary: #000000;
+  --text-strong: #000000;
+  --text-emphasis: rgba(0, 0, 0, 0.92);
+  --text-stronger: rgba(0, 0, 0, 0.87);
+  --text-quiet: rgba(0, 0, 0, 0.75);
+  --text-muted: rgba(0, 0, 0, 0.62);
+  --text-subtle: rgba(0, 0, 0, 0.52);
+  --text-faint: rgba(0, 0, 0, 0.40);
+  --text-fainter: rgba(0, 0, 0, 0.33);
+  --text-dim: rgba(0, 0, 0, 0.25);
+  --text-accent: #316ac5;
+  --border-muted: #aca899;
+  --border-subtle: #d5d2c8;
+  --border-strong: #716f64;
+  --border-stronger: #515046;
+  --border-quiet: #808080;
+  --surface-hover: rgba(49, 106, 197, 0.12);
+  --surface-active: rgba(49, 106, 197, 0.25);
+  --surface-control: #ece9d8;
+  --surface-control-hover: #e3dfd1;
+  --surface-card: rgba(255, 255, 255, 0.82);
+  --surface-card-strong: #ffffff;
+  --surface-card-muted: #f5f3eb;
+  --surface-item: #f5f3eb;
+  --select-caret: #000000;
+  --status-success: #008000;
+  --status-warning: #cc8800;
+  --status-error: #cc0000;
+  --status-unknown: #808080;
+  --message-link-color: #0066cc;
+  --shadow-accent: rgba(0, 0, 0, 0.22);
+}
+
+/* Remove modern rounded corners from sidebar elements */
+:root[data-theme="xp"] .sidebar-footer {
+  border-radius: 0;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: none;
+}
+
+:root[data-theme="xp"] .sidebar-search-input {
+  border-radius: 0;
+  border: 1px solid #003c74;
+  color: #000000;
+  background: #ffffff;
+}
+
+:root[data-theme="xp"] .sidebar-search-input::placeholder {
+  color: #808080;
+}
+
+:root[data-theme="xp"] .sidebar-search-input:focus {
+  border-color: #316ac5;
+  box-shadow: none;
+}
+
+/* Usage bar — XP progress bar style */
+:root[data-theme="xp"] .usage-bar {
+  border-radius: 0;
+  height: 14px;
+  background: #ffffff;
+  border: 1px solid #686868;
+  box-shadow: inset 0 0 1px rgba(104, 104, 104, 1);
+  padding: 1px 2px 1px 0;
+}
+
+:root[data-theme="xp"] .usage-bar-fill {
+  border-radius: 2px;
+  background:
+    repeating-linear-gradient(to right, #fff 0, #fff 2px, transparent 2px, transparent 10px),
+    linear-gradient(
+      to bottom,
+      #acedad 0%,
+      #7be47d 14%,
+      #4cda50 28%,
+      #2ed330 42%,
+      #42d845 57%,
+      #76e275 71%,
+      #8fe791 85%,
+      #ffffff 100%
+    );
+  box-shadow: none;
+}
+
+/* Sidebar inputs — white sunken on blue */
+:root[data-theme="xp"] .sidebar input:not([type="range"]),
+:root[data-theme="xp"] .sidebar select {
+  color: #000000;
+  background: #ffffff;
+  border: 1px solid #003c74;
+  box-shadow: none;
+}
+
+/* Sidebar chrome (non-project areas) — XP task-pane controls */
+:root[data-theme="xp"] .sidebar-header {
+  min-height: 24px;
+  padding: 0 2px;
+}
+
+:root[data-theme="xp"] .sidebar-header .sidebar-title-button {
+  border: none;
+  background: transparent;
+  color: #000000;
+  padding: 0;
+  text-shadow: none;
+  font-family: "Trebuchet MS", "MS Sans Serif XP", Tahoma, Verdana, sans-serif;
+  font-size: 20px;
+  line-height: 1;
+}
+
+:root[data-theme="xp"] .sidebar-header .sidebar-title-button:hover:not(:disabled) {
+  border: none;
+  background: transparent;
+  color: #000000;
+  text-shadow: none;
+  box-shadow: none;
+}
+
+:root[data-theme="xp"] .sidebar-header .sidebar-title-add,
+:root[data-theme="xp"] .sidebar-header .sidebar-search-toggle {
+  width: 21px;
+  height: 21px;
+  padding: 0;
+  border-radius: 2px;
+  border: 1px solid #003c74;
+  background: linear-gradient(180deg, #ffffff 0%, #ecebe5 86%, #d8d0c4 100%);
+  color: #000000;
+  box-shadow: none;
+}
+
+:root[data-theme="xp"] .sidebar-header .sidebar-title-add:hover,
+:root[data-theme="xp"] .sidebar-header .sidebar-search-toggle:hover,
+:root[data-theme="xp"] .sidebar-header .sidebar-search-toggle.is-active {
+  background: linear-gradient(180deg, #ffffff 0%, #f2efe7 86%, #ddd6c9 100%);
+  border-color: #003c74;
+  color: #000000;
+  box-shadow: inset -1px 1px #fff0cf, inset 1px 2px #fdd889, inset -2px 2px #fbc761, inset 2px -2px #e5a01a;
+}
+
+:root[data-theme="xp"] .sidebar-header .sidebar-title-add:active,
+:root[data-theme="xp"] .sidebar-header .sidebar-search-toggle:active,
+:root[data-theme="xp"] .sidebar-header .sidebar-search-toggle.is-active:active {
+  background: linear-gradient(180deg, #cdcac3 0%, #e3e3db 8%, #e5e5de 94%, #f2f2f1 100%);
+  box-shadow: none;
+}
+
+:root[data-theme="xp"] .sidebar-header .sidebar-title-add svg,
+:root[data-theme="xp"] .sidebar-header .sidebar-search-toggle svg {
+  width: 12px;
+  height: 12px;
+  color: #000000;
+  stroke: #000000;
+}
+
+:root[data-theme="xp"] .sidebar-search {
+  padding: 4px 2px 8px;
+}
+
+:root[data-theme="xp"] .sidebar.search-open .sidebar-search {
+  padding: 4px 2px 8px;
+}
+
+:root[data-theme="xp"] .sidebar-search.is-open {
+  border: 1px solid #7f9db9;
+  background: linear-gradient(180deg, #f0f7ff 0%, #dbe9ff 100%);
+  box-shadow:
+    inset 1px 1px 0 #ffffff,
+    inset -1px -1px 0 #c6d9f3;
+  padding: 5px 6px;
+}
+
+:root[data-theme="xp"] .sidebar-search-input {
+  border: 1px solid #7f9db9;
+  background: #ffffff;
+  color: #000000;
+  padding: 4px 24px 4px 8px;
+  font-size: 11px;
+}
+
+:root[data-theme="xp"] .sidebar-search-clear,
+:root[data-theme="xp"] .sidebar-search-clear:hover {
+  color: #003c74;
+}
+
+:root[data-theme="xp"] .workspace-drop-overlay {
+  background: rgba(8, 48, 164, 0.35);
+  backdrop-filter: none;
+}
+
+:root[data-theme="xp"] .workspace-drop-overlay-text {
+  color: #ffffff;
+  text-shadow: 1px 1px #0f1089;
+}
+
+:root[data-theme="xp"] .workspace-drop-overlay-text.is-busy {
+  color: #ffffff;
+  background: none;
+  -webkit-background-clip: border-box;
+  background-clip: border-box;
+  animation: none;
+}
+
+:root[data-theme="xp"] .sidebar-body {
+  scrollbar-color: #9eb6d8 #c5d5ff;
+  scrollbar-width: auto;
+}
+
+:root[data-theme="xp"] .sidebar-body::-webkit-scrollbar {
+  width: 16px;
+}
+
+:root[data-theme="xp"] .sidebar-body::-webkit-scrollbar-track {
+  border-left: 1px solid #8ba4c7;
+  background: url("../../XP.css/themes/XP/icon/scroll-background.svg") repeat-y center;
+}
+
+:root[data-theme="xp"] .sidebar-body::-webkit-scrollbar-thumb {
+  border: 1px solid #8ba4c7;
+  background: url("../../XP.css/themes/XP/icon/scroll-thumb.svg") no-repeat center,
+    linear-gradient(180deg, #f4f9ff 0%, #d6e3fa 100%);
+}
+
+:root[data-theme="xp"] .sidebar-body::-webkit-scrollbar-button:vertical:decrement {
+  border-left: 1px solid #8ba4c7;
+  border-bottom: 1px solid #8ba4c7;
+  background: url("../../XP.css/themes/XP/icon/scroll-arrow-up.svg") no-repeat center,
+    linear-gradient(180deg, #f6fbff 0%, #d8e4fa 100%);
+}
+
+:root[data-theme="xp"] .sidebar-body::-webkit-scrollbar-button:vertical:increment {
+  border-left: 1px solid #8ba4c7;
+  border-top: 1px solid #8ba4c7;
+  background: url("../../XP.css/themes/XP/icon/scroll-arrow-down.svg") no-repeat center,
+    linear-gradient(180deg, #f6fbff 0%, #d8e4fa 100%);
+}
+
+:root[data-theme="xp"] .sidebar-bottom-cluster {
+  border: 1px solid #7f9db9;
+  background: linear-gradient(180deg, #f8fbff 0%, #e7f0ff 100%);
+  box-shadow:
+    inset 1px 1px 0 #ffffff,
+    inset -1px -1px 0 #d6e2f4;
+  padding: 6px;
+  gap: 6px;
+}
+
+:root[data-theme="xp"] .sidebar-footer {
+  border: 1px solid #7f9db9;
+  background: #ffffff;
+  color: #000000;
+  padding: 8px;
+}
+
+:root[data-theme="xp"] .usage-bars {
+  gap: 8px;
+}
+
+:root[data-theme="xp"] .usage-label,
+:root[data-theme="xp"] .usage-title {
+  color: #003c74;
+  font-size: 11px;
+}
+
+:root[data-theme="xp"] .usage-value {
+  color: #0046d5;
+}
+
+:root[data-theme="xp"] .usage-reset {
+  color: #5d6a7a;
+}
+
+:root[data-theme="xp"] .usage-meta {
+  color: #0046d5;
+  border-top: 1px solid #d1ddf1;
+  padding-top: 5px;
+}
+
+:root[data-theme="xp"] .sidebar-corner-actions {
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+:root[data-theme="xp"] .sidebar-corner-button {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 0;
+  border: 1px solid #7f9db9;
+  color: #003c74;
+  background: linear-gradient(180deg, #ffffff 0%, #ecebe5 86%, #d8d0c4 100%);
+  box-shadow: none;
+}
+
+:root[data-theme="xp"] .sidebar-corner-button:hover:not(:disabled) {
+  color: #003c74;
+  background: linear-gradient(180deg, #ffffff 0%, #ecebe5 86%, #d8d0c4 100%);
+  box-shadow: inset -1px 1px #fff0cf, inset 1px 2px #fdd889, inset -2px 2px #fbc761, inset 2px -2px #e5a01a;
+}
+
+:root[data-theme="xp"] .sidebar-corner-button svg {
+  color: #003c74;
+  stroke: #003c74;
+}
+
+:root[data-theme="xp"] .sidebar-account-busy-dot {
+  background: #3e9b55;
+  box-shadow: 0 0 0 1px #ffffff;
+  animation: none;
+}
+
+:root[data-theme="xp"] .sidebar-account-popover .sidebar-account-list,
+:root[data-theme="xp"] .sidebar-account-settings {
+  gap: 6px;
+}
+
+:root[data-theme="xp"] .sidebar-account-row,
+:root[data-theme="xp"] .sidebar-account-settings-row,
+:root[data-theme="xp"] .sidebar-account-warning {
+  border-radius: 0;
+  border: 1px solid #aca899;
+  background: #ffffff;
+  box-shadow: none;
+}
+
+:root[data-theme="xp"] .sidebar-account-row.is-active {
+  background: #316ac5;
+  border-color: #1e4c94;
+  box-shadow: none;
+}
+
+:root[data-theme="xp"] .sidebar-account-row.is-active .sidebar-account-name,
+:root[data-theme="xp"] .sidebar-account-row.is-active .sidebar-account-subtitle {
+  color: #ffffff;
+}
+
+:root[data-theme="xp"] .sidebar-account-plan,
+:root[data-theme="xp"] .sidebar-account-active {
+  border-radius: 0;
+  border: 1px solid #7f9db9;
+  background: #eef4ff;
+  color: #003c74;
+  padding: 1px 5px;
+}
+
+:root[data-theme="xp"] .sidebar-account-row.is-active .sidebar-account-plan,
+:root[data-theme="xp"] .sidebar-account-row.is-active .sidebar-account-active {
+  border-color: rgba(255, 255, 255, 0.45);
+  background: rgba(255, 255, 255, 0.16);
+  color: #ffffff;
+}
+
+:root[data-theme="xp"] .sidebar-account-status {
+  color: #3f4f63;
+}
+
+:root[data-theme="xp"] .sidebar-account-warning-text {
+  color: #3f4f63;
+}
+
+:root[data-theme="xp"] .empty {
+  color: rgba(0, 0, 0, 0.62);
+}
+
+/* Sidebar projects pane — XP Explorer-style grouped tree */
+:root[data-theme="xp"] .workspace-list {
+  gap: 8px;
+}
+
+:root[data-theme="xp"] .pinned-section,
+:root[data-theme="xp"] .workspace-group {
+  border: 1px solid #7f9db9;
+  background: linear-gradient(180deg, #f8fbff 0%, #eef4ff 100%);
+  box-shadow:
+    inset 1px 1px 0 #ffffff,
+    inset -1px -1px 0 #d6e2f4;
+}
+
+:root[data-theme="xp"] .pinned-section {
+  gap: 0;
+}
+
+:root[data-theme="xp"] .workspace-group + .workspace-group {
+  margin-top: 0;
+}
+
+:root[data-theme="xp"] .workspace-group-header {
+  min-height: 21px;
+  padding: 2px 6px;
+  background: linear-gradient(180deg, #ecf5ff 0%, #d4e6ff 55%, #c0d8fa 100%);
+  border-bottom: 1px solid #7f9db9;
+}
+
+:root[data-theme="xp"] .workspace-group-label,
+:root[data-theme="xp"] .worktree-header {
+  text-transform: none;
+  letter-spacing: 0.01em;
+  font-size: 11px;
+  font-weight: 700;
+  color: #0046d5;
+}
+
+:root[data-theme="xp"] .workspace-group-list {
+  margin-top: 0;
+}
+
+:root[data-theme="xp"] .workspace-group-content {
+  gap: 6px;
+  padding: 6px;
+}
+
+:root[data-theme="xp"] .workspace-card,
+:root[data-theme="xp"] .worktree-card {
+  gap: 0;
+  border-radius: 0;
+  border: 1px solid #c8d8ee;
+  background: #ffffff;
+  box-shadow:
+    inset 1px 1px 0 #ffffff,
+    inset -1px -1px 0 #e4ecf8;
+}
+
+:root[data-theme="xp"] .workspace-row::before {
+  content: none;
+}
+
+:root[data-theme="xp"] .workspace-row,
+:root[data-theme="xp"] .worktree-row {
+  border-radius: 0;
+  border: 1px solid transparent;
+  background: #ffffff;
+  color: #000000;
+  padding: 4px 6px;
+}
+
+:root[data-theme="xp"] .workspace-row:hover,
+:root[data-theme="xp"] .worktree-row:hover {
+  background: #e8f1ff;
+  border-color: #b3c9e8;
+}
+
+:root[data-theme="xp"] .workspace-row.active,
+:root[data-theme="xp"] .worktree-row.active {
+  background: #316ac5;
+  border-color: #1e4c94;
+  padding-left: 6px;
+}
+
+:root[data-theme="xp"] .workspace-row.active .workspace-name-row {
+  padding-left: 0;
+}
+
+:root[data-theme="xp"] .workspace-row.active .workspace-name,
+:root[data-theme="xp"] .workspace-row.active .workspace-name-match,
+:root[data-theme="xp"] .workspace-row.active .connect,
+:root[data-theme="xp"] .workspace-row.active .workspace-add,
+:root[data-theme="xp"] .worktree-row.active .worktree-label,
+:root[data-theme="xp"] .worktree-row.active .connect,
+:root[data-theme="xp"] .worktree-row.active .worktree-toggle {
+  color: #ffffff;
+}
+
+:root[data-theme="xp"] .workspace-row.active .workspace-toggle,
+:root[data-theme="xp"] .workspace-row.active .workspace-add,
+:root[data-theme="xp"] .worktree-row.active .worktree-toggle {
+  color: #003c74;
+  background: linear-gradient(180deg, #ffffff 0%, #ecebe5 86%, #d8d0c4 100%);
+  border-color: #7f9db9;
+}
+
+:root[data-theme="xp"] .workspace-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: #003c74;
+}
+
+:root[data-theme="xp"] .workspace-name-match {
+  color: inherit;
+  background: #ffe6a3;
+  border-radius: 0;
+}
+
+:root[data-theme="xp"] .workspace-row.active .workspace-name-match {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+:root[data-theme="xp"] .workspace-add,
+:root[data-theme="xp"] .connect {
+  border-radius: 0;
+  border: 1px solid #7f9db9;
+  color: #003c74;
+  background: linear-gradient(180deg, #ffffff 0%, #ecebe5 86%, #d8d0c4 100%);
+  box-shadow: none;
+}
+
+:root[data-theme="xp"] .workspace-add {
+  width: 18px;
+  height: 18px;
+}
+
+:root[data-theme="xp"] .connect {
+  padding: 1px 6px;
+}
+
+:root[data-theme="xp"] .group-toggle,
+:root[data-theme="xp"] .workspace-toggle,
+:root[data-theme="xp"] .worktree-toggle {
+  opacity: 1;
+  pointer-events: auto;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 1px solid #7f9db9;
+  border-radius: 0;
+  color: #003c74;
+  background: #ffffff;
+  box-shadow: none;
+}
+
+:root[data-theme="xp"] .group-toggle:hover,
+:root[data-theme="xp"] .workspace-toggle:hover,
+:root[data-theme="xp"] .worktree-toggle:hover {
+  background: #f4f8ff;
+  transform: none;
+}
+
+:root[data-theme="xp"] .group-toggle-icon,
+:root[data-theme="xp"] .workspace-toggle-icon,
+:root[data-theme="xp"] .worktree-toggle-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  font-size: 0;
+  line-height: 1;
+  transform: none !important;
+  transition: none;
+}
+
+:root[data-theme="xp"] .group-toggle-icon::before,
+:root[data-theme="xp"] .workspace-toggle-icon::before,
+:root[data-theme="xp"] .worktree-toggle-icon::before {
+  content: "+";
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  margin-top: -1px;
+}
+
+:root[data-theme="xp"] .group-toggle.expanded .group-toggle-icon::before,
+:root[data-theme="xp"] .workspace-toggle.expanded .workspace-toggle-icon::before,
+:root[data-theme="xp"] .worktree-toggle.expanded .worktree-toggle-icon::before {
+  content: "-";
+}
+
+:root[data-theme="xp"] .thread-list {
+  gap: 2px;
+}
+
+:root[data-theme="xp"] .thread-row {
+  border-radius: 0;
+  border: 1px solid transparent;
+  color: #000000;
+  padding-top: 3px;
+  padding-bottom: 3px;
+}
+
+:root[data-theme="xp"] .thread-time {
+  color: #5d6a7a;
+}
+
+:root[data-theme="xp"] .thread-row:hover {
+  background: #e8f1ff;
+  border-color: #b3c9e8;
+  color: #000000;
+}
+
+:root[data-theme="xp"] .thread-row.active {
+  background: #316ac5;
+  border-color: #1e4c94;
+  color: #ffffff;
+}
+
+:root[data-theme="xp"] .thread-row.active .thread-time,
+:root[data-theme="xp"] .thread-row.active .thread-name,
+:root[data-theme="xp"] .thread-row.active .thread-pin-icon {
+  color: #ffffff;
+}
+
+:root[data-theme="xp"] .thread-status {
+  box-shadow: none;
+  animation: none;
+}
+
+:root[data-theme="xp"] .thread-status.processing {
+  background: #d98638;
+  box-shadow: none;
+  animation: none;
+}
+
+:root[data-theme="xp"] .thread-status.reviewing {
+  background: #308cb4;
+  box-shadow: none;
+  animation: none;
+}
+
+:root[data-theme="xp"] .thread-status.unread {
+  background: #316ac5;
+  box-shadow: none;
+}
+
+:root[data-theme="xp"] .thread-status.ready {
+  background: #3e9b55;
+  box-shadow: none;
+}
+
+:root[data-theme="xp"] .thread-pin-icon {
+  opacity: 1;
+  color: #0046d5;
+}
+
+:root[data-theme="xp"] .thread-list-separator {
+  height: 1px;
+  margin: 5px 10px;
+  background: #d1ddf1;
+}
+
+:root[data-theme="xp"] .thread-more {
+  color: #0046d5;
+  padding-left: 12px;
+}
+
+:root[data-theme="xp"] .thread-more:hover {
+  color: #00308f;
+}
+
+:root[data-theme="xp"] .worktree-section {
+  border-left: 1px dotted #9eb6d8;
+  padding-left: 8px;
+  margin-top: 4px;
+}
+
+:root[data-theme="xp"] .worktree-header-icon,
+:root[data-theme="xp"] .worktree-label {
+  color: #003c74;
+}
+
+:root[data-theme="xp"] .worktree-row.deleting {
+  background: #f4f4f4;
+  border-color: #d0d0bf;
+}
+
+:root[data-theme="xp"] .worktree-row.deleting .worktree-label {
+  color: #707070;
+}
+
+/* ═══════════════════════════════════════════════════════
+   ACCOUNT POPUP — Fixed-positioned outside sidebar,
+   needs its own light-on-dark overrides + XP window look
+   ═══════════════════════════════════════════════════════ */
+:root[data-theme="xp"] .sidebar-account-popover {
+  border-radius: 0;
+  border: 2px solid;
+  border-color: #0831d9;
+  background: #ece9d8;
+  box-shadow:
+    inset -1px -1px #00138c,
+    inset 1px 1px #0831d9,
+    inset -2px -2px #001ea0,
+    inset 2px 2px #166aee,
+    inset -3px -3px #003bda,
+    inset 3px 3px #0855dd,
+    2px 4px 14px rgba(0, 0, 0, 0.30);
+  padding: 3px;
+  padding-top: 0;
+}
+
+/* Account header — XP title bar mini-style */
+:root[data-theme="xp"] .sidebar-account-header {
+  background: linear-gradient(
+    180deg,
+    rgba(9, 151, 255, 1) 0%,
+    rgba(0, 83, 238, 1) 8%,
+    rgba(0, 80, 238, 1) 40%,
+    rgba(0, 102, 255, 1) 88%,
+    rgba(0, 61, 215, 1) 100%
+  );
+  margin: 0 -3px;
+  padding: 4px 8px;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+
+:root[data-theme="xp"] .sidebar-account-title {
+  color: #ffffff;
+  text-shadow: 1px 1px #0f1089;
+  font-weight: 700;
+  font-size: 11px;
+}
+
+/* Account popup icon buttons — XP mini title bar buttons */
+:root[data-theme="xp"] .sidebar-account-icon-button {
+  border-radius: 3px;
+  width: 21px;
+  height: 21px;
+  color: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.3);
+  background: #0050ee;
+  box-shadow: none;
+}
+
+:root[data-theme="xp"] .sidebar-account-icon-button:hover:not(:disabled) {
+  background: #2070ff;
+  box-shadow: none;
+}
+
+:root[data-theme="xp"] .sidebar-account-icon-button svg {
+  stroke: #ffffff;
+  color: #ffffff;
+}
+
+/* Account list / rows inside popup — XP beige style */
+:root[data-theme="xp"] .sidebar-account-popover .sidebar-account-list {
+  padding: 8px;
+}
+
+:root[data-theme="xp"] .sidebar-account-status {
+  color: rgba(0, 0, 0, 0.62);
+}
+
+:root[data-theme="xp"] .sidebar-account-settings-row {
+  border-radius: 0;
+  border: 1px solid #aca899;
+  background: #f5f3eb;
+}
+
+:root[data-theme="xp"] .sidebar-account-delete {
+  border-radius: 3px;
+}
+
+/* Account toggle — XP style */
+:root[data-theme="xp"] .sidebar-account-toggle {
+  border-radius: 0;
+  border: 1px solid #7f9db9;
+  background: #ffffff;
+}
+
+:root[data-theme="xp"] .sidebar-account-toggle-thumb {
+  border-radius: 0;
+  background: #316ac5;
+}
+
+/* ═══════════════════════════════════════════════════════
+   TITLE BAR / TOPBAR — XP Vivid Blue Gradient
+   From XP.css: exact Luna title bar gradient
+   ═══════════════════════════════════════════════════════ */
+:root[data-theme="xp"] .main-topbar,
+:root[data-theme="xp"] .tabbar,
+:root[data-theme="xp"] .settings-titlebar {
+  border-bottom: 1px solid #003c74;
+  border-top: 1px solid #0831d9;
+  border-left: 1px solid #0831d9;
+  border-right: 1px solid #001ea0;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+:root[data-theme="xp"] .main-topbar {
+  min-height: var(--main-topbar-height);
+  height: var(--main-topbar-height);
+  padding-top: 3px;
+  padding-bottom: 3px;
+}
+
+:root[data-theme="xp"] .main-topbar,
+:root[data-theme="xp"] .main-topbar .subtitle,
+:root[data-theme="xp"] .main-topbar .workspace-name,
+:root[data-theme="xp"] .main-topbar .workspace-path,
+:root[data-theme="xp"] .settings-title,
+:root[data-theme="xp"] .tabbar-item {
+  color: #ffffff;
+  text-shadow: 1px 1px #0f1089;
+}
+
+/* Branch selector in top header */
+:root[data-theme="xp"] .main-topbar .workspace-branch-button,
+:root[data-theme="xp"] .main-topbar .workspace-branch-static-button,
+:root[data-theme="xp"] .main-topbar .workspace-branch {
+  color: #ffffff;
+}
+
+:root[data-theme="xp"] .main-topbar .workspace-branch-caret {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+/* Title bar buttons — XP.css style */
+:root[data-theme="xp"] .main-topbar button,
+:root[data-theme="xp"] .tabbar button,
+:root[data-theme="xp"] .settings-titlebar button {
+  color: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.25);
+  background: #0050ee;
+  box-shadow: none;
+  min-width: auto;
+}
+
+:root[data-theme="xp"] .main-topbar button:hover:not(:disabled),
+:root[data-theme="xp"] .tabbar button:hover:not(:disabled),
+:root[data-theme="xp"] .settings-titlebar button:hover:not(:disabled) {
+  background: #2070ff;
+  box-shadow: none;
+}
+
+:root[data-theme="xp"] .main-topbar button:active:not(:disabled),
+:root[data-theme="xp"] .tabbar button:active:not(:disabled),
+:root[data-theme="xp"] .settings-titlebar button:active:not(:disabled) {
+  background: #003cbc;
+  box-shadow: none;
+}
+
+:root[data-theme="xp"] .main-topbar button svg,
+:root[data-theme="xp"] .tabbar button svg,
+:root[data-theme="xp"] .settings-titlebar button svg {
+  color: #ffffff;
+  stroke: #ffffff;
+}
+
+/* Active tab in tab bar */
+:root[data-theme="xp"] .tabbar-item.active {
+  background: rgba(255, 255, 255, 0.20);
+  border-color: rgba(255, 255, 255, 0.4);
+  box-shadow: inset 0 2px 0 #ffc73c;
+  border-top: 1px solid #e68b2c;
+}
+
+/* ═══════════════════════════════════════════════════════
+   WINDOWS / DIALOGS — XP Window Chrome
+   From XP.css: multi-layer blue inset shadow, rounded top
+   ═══════════════════════════════════════════════════════ */
+:root[data-theme="xp"] .settings-window,
+:root[data-theme="xp"] .popover-surface,
+:root[data-theme="xp"] .open-app-dropdown,
+:root[data-theme="xp"] .launch-script-popover,
+:root[data-theme="xp"] .composer-suggestions,
+:root[data-theme="xp"] .settings-doctor,
+:root[data-theme="xp"] .diff-viewer-pr,
+:root[data-theme="xp"] .diff-viewer-item,
+:root[data-theme="xp"] .terminal-status {
+  border-radius: 8px 8px 0 0;
+  border: none;
+  box-shadow:
+    inset -1px -1px #00138c,
+    inset 1px 1px #0831d9,
+    inset -2px -2px #001ea0,
+    inset 2px 2px #166aee,
+    inset -3px -3px #003bda,
+    inset 3px 3px #0855dd,
+    2px 4px 14px rgba(0, 0, 0, 0.30);
+}
+
+/* Settings backdrop */
+:root[data-theme="xp"] .settings-backdrop {
+  background: rgba(0, 0, 0, 0.25);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* ═══════════════════════════════════════════════════════
+   SETTINGS / CARD ELEMENTS — XP Raised Panels
+   ═══════════════════════════════════════════════════════ */
+:root[data-theme="xp"] .settings-nav,
+:root[data-theme="xp"] .settings-select,
+:root[data-theme="xp"] .settings-input,
+:root[data-theme="xp"] .settings-toggle-row,
+:root[data-theme="xp"] .settings-project-row,
+:root[data-theme="xp"] .settings-group-row,
+:root[data-theme="xp"] .settings-override-row,
+:root[data-theme="xp"] .settings-open-app-row,
+:root[data-theme="xp"] .home-usage-card,
+:root[data-theme="xp"] .home-usage-chart-card,
+:root[data-theme="xp"] .home-latest-card,
+:root[data-theme="xp"] .composer-queue,
+:root[data-theme="xp"] .composer-attachment {
+  border-radius: 0;
+  border: 1px solid #aca899;
+  box-shadow:
+    inset 1px 1px 0 #ffffff,
+    inset -1px -1px 0 #f1efe2;
+}
+
+/* Active navigation / tab items — XP selection blue */
+:root[data-theme="xp"] .settings-nav.active,
+:root[data-theme="xp"] .terminal-tab.active,
+:root[data-theme="xp"] .open-app-option.is-active,
+:root[data-theme="xp"] .diff-view-toggle-button.is-active,
+:root[data-theme="xp"] .main-header-action.is-active {
+  background: #316ac5;
+  color: #ffffff;
+  border-color: #1e4c94;
+}
+
+/* Hover on nav — XP orange glow from XP.css tabs */
+:root[data-theme="xp"] .settings-nav:hover:not(.active) {
+  border-top: 1px solid #e68b2c;
+  box-shadow: inset 0 2px #ffc73c;
+}
+
+/* ═══════════════════════════════════════════════════════
+   TOGGLES — XP-Style Switch
+   ═══════════════════════════════════════════════════════ */
+:root[data-theme="xp"] .settings-toggle {
+  width: 42px;
+  height: 20px;
+  padding: 2px;
+  border-radius: 0;
+  border: 1px solid #7f9db9;
+  background: #ffffff;
+  box-shadow: none;
+}
+
+:root[data-theme="xp"] .settings-toggle.on {
+  background: #316ac5;
+  border-color: #1d5281;
+}
+
+:root[data-theme="xp"] .settings-toggle-knob {
+  width: 15px;
+  height: 14px;
+  border-radius: 0;
+  border: 1px solid #003c74;
+  background: linear-gradient(180deg, #ffffff 0%, #ecebe5 86%, #d8d0c4 100%);
+  box-shadow: none;
+}
+
+/* ═══════════════════════════════════════════════════════
+   CONTENT PANELS
+   ═══════════════════════════════════════════════════════ */
+:root[data-theme="xp"] .messages-full,
+:root[data-theme="xp"] .home,
+:root[data-theme="xp"] .workspace-home,
+:root[data-theme="xp"] .composer,
+:root[data-theme="xp"] .terminal-panel,
+:root[data-theme="xp"] .diff-viewer,
+:root[data-theme="xp"] .settings-content {
+  border-color: #aca899;
+}
+
+/* ═══════════════════════════════════════════════════════
+   COMPOSER — Sunken Input Area
+   ═══════════════════════════════════════════════════════ */
+:root[data-theme="xp"] .composer-input-row {
+  border: 1px solid #7f9db9;
+  border-radius: 0;
+  background: #ffffff;
+  padding: 2px 4px;
+  box-shadow: none;
+}
+
+/* ═══════════════════════════════════════════════════════
+   MESSAGE BUBBLES — XP Group-Box Style
+   ═══════════════════════════════════════════════════════ */
+:root[data-theme="xp"] .bubble {
+  border: 1px solid #aca899;
+  border-radius: 0;
+  box-shadow:
+    inset 1px 1px 0 #ffffff,
+    inset -1px -1px 0 #f1efe2;
+}
+
+:root[data-theme="xp"] .message.assistant .bubble {
+  border-left: 1px solid #aca899;
+}
+
+/* ═══════════════════════════════════════════════════════
+   TERMINAL — XP Command Prompt (cmd.exe)
+   ═══════════════════════════════════════════════════════ */
+:root[data-theme="xp"] .terminal-panel {
+  --terminal-background: #000000;
+  --terminal-foreground: #c0c0c0;
+  --terminal-cursor: #ffffff;
+  --terminal-selection: rgba(49, 106, 197, 0.45);
+}
+
+:root[data-theme="xp"] .terminal-surface {
+  border-top: 1px solid #7f9db9;
+}
+
+/* ═══════════════════════════════════════════════════════
+   SCROLLBARS — XP.css Luna Blue style
+   Blue-tinted thumb with white border, rounded 2px
+   ═══════════════════════════════════════════════════════ */
+:root[data-theme="xp"] * {
+  scrollbar-width: auto;
+  scrollbar-color: #c8d6fb #e8ecf4;
+}
+
+:root[data-theme="xp"] ::-webkit-scrollbar {
+  width: 17px;
+  height: 17px;
+}
+
+:root[data-theme="xp"] ::-webkit-scrollbar-track {
+  background: linear-gradient(90deg, rgba(197, 213, 255, 1) 0%, rgba(181, 211, 255, 1) 86%, rgba(182, 202, 247, 1) 100%);
+}
+
+:root[data-theme="xp"] ::-webkit-scrollbar-track:vertical {
+  background-image: url("../../XP.css/themes/XP/icon/scroll-background.svg");
+}
+
+:root[data-theme="xp"] ::-webkit-scrollbar-track:horizontal {
+  background-image: url("../../XP.css/themes/XP/icon/scroll-background-horizontal.svg");
+}
+
+:root[data-theme="xp"] ::-webkit-scrollbar-thumb {
+  background-color: #c8d6fb;
+  border: 1px solid white;
+  border-radius: 2px;
+  box-shadow: inset -3px 0 #bad1fc, inset 1px 1px #b7caf5;
+  min-height: 24px;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 7px;
+}
+
+:root[data-theme="xp"] ::-webkit-scrollbar-thumb:vertical {
+  background-image: url("../../XP.css/themes/XP/icon/scroll-thumb.svg");
+}
+
+:root[data-theme="xp"] ::-webkit-scrollbar-thumb:horizontal {
+  background-image: url("../../XP.css/themes/XP/icon/scroll-thumb-horizontal.svg");
+  background-size: 8px;
+}
+
+:root[data-theme="xp"] ::-webkit-scrollbar-thumb:hover {
+  background-color: #b8c8f0;
+}
+
+:root[data-theme="xp"] ::-webkit-scrollbar-thumb:active {
+  background-color: #a0b4e0;
+}
+
+:root[data-theme="xp"] ::-webkit-scrollbar-corner {
+  background: #dfdfdf;
+}
+
+:root[data-theme="xp"] ::-webkit-scrollbar-button {
+  background-position: center;
+  background-repeat: no-repeat;
+  background-color: #c8d6fb;
+  border: 1px solid #ffffff;
+  box-shadow: inset -2px 0 #bad1fc, inset 1px 1px #b7caf5;
+}
+
+:root[data-theme="xp"] ::-webkit-scrollbar-button:single-button:vertical:decrement {
+  height: 17px;
+  background-image: url("../../XP.css/themes/XP/icon/scroll-arrow-up.svg");
+}
+
+:root[data-theme="xp"] ::-webkit-scrollbar-button:single-button:vertical:increment {
+  height: 17px;
+  background-image: url("../../XP.css/themes/XP/icon/scroll-arrow-down.svg");
+}
+
+:root[data-theme="xp"] ::-webkit-scrollbar-button:single-button:horizontal:decrement {
+  width: 17px;
+  background-image: url("../../XP.css/themes/XP/icon/scroll-arrow-left.svg");
+}
+
+:root[data-theme="xp"] ::-webkit-scrollbar-button:single-button:horizontal:increment {
+  width: 17px;
+  background-image: url("../../XP.css/themes/XP/icon/scroll-arrow-right.svg");
+}
+
+/* ═══════════════════════════════════════════════════════
+   MISC
+   ═══════════════════════════════════════════════════════ */
+:root[data-theme="xp"] .working-text {
+  color: var(--text-muted);
+  background: none;
+}
+
+:root[data-theme="xp"] .diff-add {
+  color: #008000;
+}
+
+:root[data-theme="xp"] .diff-del {
+  color: #cc0000;
+}
+
+:root[data-theme="xp"] .diff-row:hover .diff-sep {
+  color: var(--text-faint);
+}
+
+/* Code blocks — XP Notepad-like white with sunken border */
+:root[data-theme="xp"] .markdown-codeblock {
+  border: 1px solid #7f9db9;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+/* Inline code */
+:root[data-theme="xp"] .markdown code {
+  background: #f5f3eb;
+  border: 1px solid #aca899;
+  border-radius: 0;
+}
+
+/* Tooltips — XP pale yellow */
+:root[data-theme="xp"] [data-tooltip]::after,
+:root[data-theme="xp"] .tooltip {
+  background: #ffffe1;
+  color: #000000;
+  border: 1px solid #000000;
+  border-radius: 0;
+}
+
+/* Status bar style for composer bar row */
+:root[data-theme="xp"] .composer-bar {
+  border-top: 1px solid rgba(208, 206, 191, 0.75);
+}
+
+/* ═══════════════════════════════════════════════════════
+   GIT PANEL — XP Explorer/ListView pass (XP.css refs)
+   refs: XP.css/themes/XP/_forms.scss, _treeview.scss, _groupbox.scss
+   ═══════════════════════════════════════════════════════ */
+:root[data-theme="xp"] .diff-panel {
+  background: transparent;
+  padding: 8px 10px 0;
+  gap: 6px;
+  overflow-y: auto;
+}
+
+:root[data-theme="xp"] .diff-status,
+:root[data-theme="xp"] .diff-branch-row,
+:root[data-theme="xp"] .git-log-sync {
+  margin-top: 0;
+  color: #5f5f55;
+}
+
+:root[data-theme="xp"] .diff-list,
+:root[data-theme="xp"] .git-log-list,
+:root[data-theme="xp"] .git-issues-list,
+:root[data-theme="xp"] .git-pr-list,
+:root[data-theme="xp"] .file-tree-list {
+  border: 1px solid #7f9db9;
+  background: #ffffff;
+  padding: 4px;
+  gap: 2px;
+}
+
+:root[data-theme="xp"] .diff-list {
+  flex: 0 0 auto;
+  min-height: auto;
+  overflow-y: visible;
+}
+
+:root[data-theme="xp"] .diff-section {
+  border-radius: 0;
+  border: 1px solid #d0d0bf;
+  background: #f5f3eb;
+  box-shadow: none;
+  padding: 4px;
+}
+
+:root[data-theme="xp"] .diff-section-title {
+  color: #0046d5;
+  text-transform: none;
+  letter-spacing: 0.01em;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 4px;
+}
+
+:root[data-theme="xp"] .diff-row {
+  border-radius: 0;
+  border: 1px solid #d0d0bf;
+  background: #ffffff;
+  box-shadow: none;
+  padding: 4px 6px;
+}
+
+:root[data-theme="xp"] .diff-row:hover {
+  background: #e8f1ff;
+  border-color: #7f9db9;
+  box-shadow: none;
+}
+
+:root[data-theme="xp"] .diff-row.active,
+:root[data-theme="xp"] .diff-row.selected,
+:root[data-theme="xp"] .diff-row.selected.active {
+  background: #316ac5;
+  border-color: #1e4c94;
+  box-shadow: none;
+}
+
+:root[data-theme="xp"] .diff-row.active .diff-path,
+:root[data-theme="xp"] .diff-row.active .diff-dir,
+:root[data-theme="xp"] .diff-row.active .diff-name,
+:root[data-theme="xp"] .diff-row.active .diff-counts-inline,
+:root[data-theme="xp"] .diff-row.selected .diff-path,
+:root[data-theme="xp"] .diff-row.selected .diff-dir,
+:root[data-theme="xp"] .diff-row.selected .diff-name,
+:root[data-theme="xp"] .diff-row.selected .diff-counts-inline {
+  color: #ffffff;
+}
+
+:root[data-theme="xp"] .diff-icon,
+:root[data-theme="xp"] .diff-counts-inline {
+  border-radius: 0;
+}
+
+:root[data-theme="xp"] .diff-counts-inline {
+  border-color: #aca899;
+  background: #f5f3eb;
+}
+
+:root[data-theme="xp"] .diff-row-action,
+:root[data-theme="xp"] .diff-viewer-header-action {
+  width: 21px;
+  height: 21px;
+  border-radius: 0;
+  border: 1px solid #7f9db9;
+  background: linear-gradient(180deg, #ffffff 0%, #ecebe5 86%, #d8d0c4 100%);
+  color: #003c74;
+}
+
+:root[data-theme="xp"] .diff-row-action:hover,
+:root[data-theme="xp"] .diff-viewer-header-action:hover,
+:root[data-theme="xp"] .diff-row-action--stage:hover,
+:root[data-theme="xp"] .diff-row-action--unstage:hover,
+:root[data-theme="xp"] .diff-row-action--discard:hover,
+:root[data-theme="xp"] .diff-viewer-header-action--discard:hover {
+  border-color: #1d5281;
+  background: linear-gradient(180deg, #f4fbff 0%, #d6e9ff 100%);
+  color: #003c74;
+  box-shadow: none;
+}
+
+:root[data-theme="xp"] .diff-viewer {
+  background: #ece9d8;
+  border: none;
+  border-radius: 0;
+  padding: 8px 0 10px;
+}
+
+:root[data-theme="xp"] .diff-viewer-pr {
+  margin: 8px 10px 10px;
+  padding: 10px;
+  border-radius: 0;
+  border: 1px solid #7f9db9;
+  background: #ffffff;
+  box-shadow: none;
+}
+
+:root[data-theme="xp"] .diff-viewer-pr-branch,
+:root[data-theme="xp"] .diff-viewer-pr-pill,
+:root[data-theme="xp"] .git-pr-pill {
+  border-radius: 0;
+}
+
+:root[data-theme="xp"] .diff-viewer-pr-branch,
+:root[data-theme="xp"] .git-pr-pill {
+  border-color: #aca899;
+  background: #f5f3eb;
+  color: #000000;
+}
+
+:root[data-theme="xp"] .diff-viewer-pr-timeline-list::before {
+  background: #9eb6d8;
+}
+
+:root[data-theme="xp"] .diff-viewer-pr-timeline-marker {
+  border-radius: 0;
+  border: 1px solid #7f9db9;
+  background: #ffffff;
+}
+
+:root[data-theme="xp"] .diff-viewer-pr-timeline-content {
+  border-radius: 0;
+  border: 1px solid #d0d0bf;
+  background: #f5f3eb;
+}
+
+:root[data-theme="xp"] .diff-viewer-item {
+  border-radius: 0;
+  border: 1px solid #aca899;
+  background: #ffffff;
+  box-shadow: none;
+}
+
+:root[data-theme="xp"] .diff-viewer-item.active {
+  border-color: #1e4c94;
+  background: #e8f1ff;
+  box-shadow: none;
+}
+
+:root[data-theme="xp"] .diff-viewer-header,
+:root[data-theme="xp"] .diff-viewer-header-sticky {
+  border-radius: 0;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  background: linear-gradient(180deg, #f8fbff 0%, #eef4ff 100%);
+  border-bottom: 1px solid #7f9db9;
+  box-shadow: none;
+}
+
+:root[data-theme="xp"] .diff-viewer-status {
+  border-radius: 0;
+  border: 1px solid #aca899;
+  background: #f5f3eb;
+  color: #000000;
+}
+
+:root[data-theme="xp"] .diff-viewer-path {
+  color: #000000;
+}
+
+:root[data-theme="xp"] .diff-viewer-output,
+:root[data-theme="xp"] .diff-viewer-output-flat {
+  border-radius: 0;
+  background: #ffffff;
+  border: 1px solid #7f9db9;
+  box-shadow: none;
+}
+
+:root[data-theme="xp"] .diff-line.is-selectable:hover,
+:root[data-theme="xp"] .diff-line.is-selected {
+  background: #d9e8ff;
+  box-shadow: inset 2px 0 0 #316ac5;
+}
+
+:root[data-theme="xp"] .diff-line.is-selected::before {
+  width: 2px;
+  background: #316ac5;
+}
+
+:root[data-theme="xp"] .image-diff-placeholder {
+  border-radius: 0;
+  border: 1px solid #aca899;
+  background: #f5f3eb;
+}
+
+:root[data-theme="xp"] .git-log-entry,
+:root[data-theme="xp"] .git-issue-entry,
+:root[data-theme="xp"] .git-pr-entry {
+  border: 1px solid transparent;
+  border-radius: 0;
+  padding: 5px 6px;
+}
+
+:root[data-theme="xp"] .git-log-entry:hover,
+:root[data-theme="xp"] .git-issue-entry:hover,
+:root[data-theme="xp"] .git-pr-entry:hover {
+  background: #e8f1ff;
+  border-color: #7f9db9;
+}
+
+:root[data-theme="xp"] .git-log-entry.active,
+:root[data-theme="xp"] .git-pr-entry.active {
+  background: #316ac5;
+  border-color: #1e4c94;
+  border-radius: 0;
+  margin: 0;
+  padding: 5px 6px;
+}
+
+:root[data-theme="xp"] .git-log-entry.active .git-log-summary,
+:root[data-theme="xp"] .git-log-entry.active .git-log-meta,
+:root[data-theme="xp"] .git-pr-entry.active .git-pr-title,
+:root[data-theme="xp"] .git-pr-entry.active .git-pr-meta,
+:root[data-theme="xp"] .git-pr-entry.active .git-pr-number,
+:root[data-theme="xp"] .git-pr-entry.active .git-pr-author-inline,
+:root[data-theme="xp"] .git-pr-entry.active .git-pr-time {
+  color: #ffffff;
+}
+
+:root[data-theme="xp"] .git-root-panel {
+  border-radius: 0;
+  border: 1px solid #aca899;
+  background: #f5f3eb;
+  box-shadow:
+    inset 1px 1px 0 #ffffff,
+    inset -1px -1px 0 #f1efe2;
+}
+
+:root[data-theme="xp"] .git-root-item {
+  border-radius: 0;
+  border-color: #aca899;
+  background: #ffffff;
+}
+
+:root[data-theme="xp"] .git-root-item.active {
+  background: #316ac5;
+  border-color: #1e4c94;
+}
+
+:root[data-theme="xp"] .git-root-item.active .git-root-path,
+:root[data-theme="xp"] .git-root-item.active .git-root-tag {
+  color: #ffffff;
+}
+
+:root[data-theme="xp"] .file-tree-search {
+  border-radius: 0;
+  border: 1px solid #7f9db9;
+  background: #ffffff;
+  color: #000000;
+}
+
+:root[data-theme="xp"] .file-tree-search-input {
+  color: #000000;
+}
+
+:root[data-theme="xp"] .commit-message-input {
+  border-radius: 0;
+  border: 1px solid #7f9db9;
+  background: #ffffff;
+  color: #000000;
+}
+
+:root[data-theme="xp"] .commit-message-input:focus {
+  border-color: #316ac5;
+  box-shadow: inset 2px 2px white, inset -2px -2px white;
+  color: #000000;
+}
+
+:root[data-theme="xp"] .commit-message-generate-button {
+  border-radius: 0;
+  border: 1px solid #7f9db9;
+  background: linear-gradient(180deg, #ffffff 0%, #ecebe5 86%, #d8d0c4 100%);
+  color: #003c74;
+}
+
+:root[data-theme="xp"] .commit-message-generate-button:hover:not(:disabled) {
+  border-color: #1d5281;
+  background: linear-gradient(180deg, #f4fbff 0%, #d6e9ff 100%);
+  color: #003c74;
+}
+
+:root[data-theme="xp"] .commit-button,
+:root[data-theme="xp"] .push-button,
+:root[data-theme="xp"] .push-button-secondary {
+  border-radius: 0;
+  border: 1px solid #003c74;
+  background: linear-gradient(180deg, #ffffff 0%, #ecebe5 86%, #d8d0c4 100%);
+  color: #000000;
+  box-shadow: none;
+}
+
+:root[data-theme="xp"] .commit-button:hover:not(:disabled),
+:root[data-theme="xp"] .push-button:hover:not(:disabled),
+:root[data-theme="xp"] .push-button-secondary:hover:not(:disabled) {
+  border-color: #1d5281;
+  background: linear-gradient(180deg, #f4fbff 0%, #d6e9ff 100%);
+  color: #000000;
+}
+
+:root[data-theme="xp"] .commit-button:disabled,
+:root[data-theme="xp"] .push-button:disabled,
+:root[data-theme="xp"] .push-button-secondary:disabled {
+  opacity: 0.55;
+}
+
+:root[data-theme="xp"] .push-count {
+  border-radius: 0;
+  border: 1px solid #aca899;
+  background: #f5f3eb;
+  color: #000000;
+}
+
+/* Remove modern border-radius from all card-like things */
+:root[data-theme="xp"] .composer-queue,
+:root[data-theme="xp"] .composer-attachment,
+:root[data-theme="xp"] .composer-waveform,
+:root[data-theme="xp"] .composer-dictation-error,
+:root[data-theme="xp"] .composer-dictation-hint {
+  border-radius: 0;
+}

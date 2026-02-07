@@ -17,7 +17,7 @@ import {
 import { normalizeOpenAppTargets } from "../../app/utils/openApp";
 import { getDefaultInterruptShortcut } from "../../../utils/shortcuts";
 
-const allowedThemes = new Set(["system", "light", "dark", "dim"]);
+const allowedThemes = new Set(["system", "light", "dark", "dim", "xp"]);
 const allowedPersonality = new Set(["friendly", "pragmatic"]);
 
 const defaultSettings: AppSettings = {

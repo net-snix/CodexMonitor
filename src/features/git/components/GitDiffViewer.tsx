@@ -74,6 +74,11 @@ diffs-container,
   --diffs-bg: rgba(255, 255, 255, 0.35);
 }
 
+[data-diffs-header][data-theme-type='xp'],
+[data-diffs][data-theme-type='xp'] {
+  --diffs-bg: rgba(255, 255, 255, 0.45);
+}
+
 [data-diffs-header][data-theme-type='dark'],
 [data-diffs][data-theme-type='dark'] {
   --diffs-bg: rgba(10, 12, 16, 0.35);

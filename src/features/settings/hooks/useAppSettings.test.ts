@@ -73,6 +73,18 @@ describe("useAppSettings", () => {
     expect(result.current.settings.interruptShortcut).toBeTruthy();
   });
 
+  it("preserves xp theme from persisted settings", async () => {
+    getAppSettingsMock.mockResolvedValue(({
+      theme: "xp",
+    } as unknown) as AppSettings);
+
+    const { result } = renderHook(() => useAppSettings());
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(result.current.settings.theme).toBe("xp");
+  });
+
   it("persists settings via updateAppSettings and updates local state", async () => {
     getAppSettingsMock.mockResolvedValue({} as AppSettings);
     const { result } = renderHook(() => useAppSettings());

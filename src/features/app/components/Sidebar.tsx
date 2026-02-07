@@ -639,21 +639,23 @@ export function Sidebar({
           )}
         </div>
       </div>
-      <SidebarFooter
-        sessionPercent={sessionPercent}
-        weeklyPercent={weeklyPercent}
-        sessionResetLabel={sessionResetLabel}
-        weeklyResetLabel={weeklyResetLabel}
-        creditsLabel={creditsLabel}
-        showWeekly={showWeekly}
-      />
-      <SidebarCornerActions
-        onOpenSettings={onOpenSettings}
-        onOpenDebug={onOpenDebug}
-        showDebugButton={showDebugButton}
-        showAccountSwitcher={showAccountSwitcher}
-        accountSwitcher={accountSwitcher}
-      />
+      <div className="sidebar-bottom-cluster">
+        <SidebarFooter
+          sessionPercent={sessionPercent}
+          weeklyPercent={weeklyPercent}
+          sessionResetLabel={sessionResetLabel}
+          weeklyResetLabel={weeklyResetLabel}
+          creditsLabel={creditsLabel}
+          showWeekly={showWeekly}
+        />
+        <SidebarCornerActions
+          onOpenSettings={onOpenSettings}
+          onOpenDebug={onOpenDebug}
+          showDebugButton={showDebugButton}
+          showAccountSwitcher={showAccountSwitcher}
+          accountSwitcher={accountSwitcher}
+        />
+      </div>
     </aside>
   );
 }
