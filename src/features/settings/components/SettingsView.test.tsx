@@ -295,6 +295,14 @@ const renderEnvironmentsSection = (
 };
 
 describe("SettingsView Display", () => {
+  it("includes the windows xp theme option", () => {
+    renderDisplaySection();
+
+    const select = screen.getByLabelText("Theme");
+    const xpOption = within(select).getByRole("option", { name: "Windows XP" });
+    expect(xpOption).toBeTruthy();
+  });
+
   it("updates the theme selection", async () => {
     const onUpdateAppSettings = vi.fn().mockResolvedValue(undefined);
     renderDisplaySection({ onUpdateAppSettings });

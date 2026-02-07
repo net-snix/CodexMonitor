@@ -116,7 +116,7 @@ export type ReviewTarget =
 export type AccessMode = "read-only" | "current" | "full-access";
 export type BackendMode = "local" | "remote";
 export type RemoteBackendProvider = "tcp" | "orbit";
-export type ThemePreference = "system" | "light" | "dark" | "dim";
+export type ThemePreference = "system" | "light" | "dark" | "dim" | "xp";
 export type PersonalityPreference = "friendly" | "pragmatic";
 
 

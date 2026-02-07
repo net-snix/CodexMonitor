@@ -676,27 +676,29 @@ export const Sidebar = memo(function Sidebar({
           )}
         </div>
       </div>
-      <SidebarFooter
-        sessionPercent={sessionPercent}
-        weeklyPercent={weeklyPercent}
-        sessionResetLabel={sessionResetLabel}
-        weeklyResetLabel={weeklyResetLabel}
-        creditsLabel={creditsLabel}
-        showWeekly={showWeekly}
-      />
-      <SidebarCornerActions
-        onOpenSettings={onOpenSettings}
-        onOpenDebug={onOpenDebug}
-        showDebugButton={showDebugButton}
-        showAccountSwitcher={showAccountSwitcher}
-        accountLabel={accountButtonLabel}
-        accountActionLabel={accountActionLabel}
-        accountDisabled={accountSwitchDisabled}
-        accountSwitching={accountSwitching}
-        accountCancelDisabled={accountCancelDisabled}
-        onSwitchAccount={onSwitchAccount}
-        onCancelSwitchAccount={onCancelSwitchAccount}
-      />
+      <div className="sidebar-bottom-cluster">
+        <SidebarFooter
+          sessionPercent={sessionPercent}
+          weeklyPercent={weeklyPercent}
+          sessionResetLabel={sessionResetLabel}
+          weeklyResetLabel={weeklyResetLabel}
+          creditsLabel={creditsLabel}
+          showWeekly={showWeekly}
+        />
+        <SidebarCornerActions
+          onOpenSettings={onOpenSettings}
+          onOpenDebug={onOpenDebug}
+          showDebugButton={showDebugButton}
+          showAccountSwitcher={showAccountSwitcher}
+          accountLabel={accountButtonLabel}
+          accountActionLabel={accountActionLabel}
+          accountDisabled={accountSwitchDisabled}
+          accountSwitching={accountSwitching}
+          accountCancelDisabled={accountCancelDisabled}
+          onSwitchAccount={onSwitchAccount}
+          onCancelSwitchAccount={onCancelSwitchAccount}
+        />
+      </div>
     </aside>
   );
 });
