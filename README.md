@@ -4,6 +4,16 @@
 
 CodexMonitor is a Tauri app for orchestrating multiple Codex agents across local workspaces. It provides a sidebar to manage projects, a home screen for quick actions, and a conversation view backed by the Codex app-server protocol.
 
+## Fork differences (net-snix)
+
+Strikethrough means the item has landed in origin.
+
+- Account saver: persist multiple Codex auth profiles.
+- Easy switching: one-click switch between saved accounts; optional auto-switch when limits hit.
+- ~~Dim mode~~
+- ~~Usage-left toggle differs~~
+- Windows XP theme: Luna-inspired XP styling option for the UI.
+
 ## Features
 
 ### Workspaces & Threads
@@ -40,6 +50,7 @@ CodexMonitor is a Tauri app for orchestrating multiple Codex agents across local
 - Resizable sidebar/right/plan/terminal/debug panels with persisted sizes.
 - Responsive layouts (desktop/tablet/phone) with tabbed navigation.
 - Sidebar usage and credits meter for account rate limits plus a home usage snapshot.
+- Optional Windows XP (Luna) theme for classic desktop styling.
 - Terminal dock with multiple tabs for background commands (experimental).
 - In-app updates with toast-driven download/install, debug panel copy/clear, sound notifications, plus platform-specific window effects (macOS overlay title bar + vibrancy) and a reduced transparency toggle.
 
