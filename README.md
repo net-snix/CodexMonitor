@@ -8,11 +8,16 @@ CodexMonitor is a Tauri app for orchestrating multiple Codex agents across local
 
 Strikethrough means the item has landed in origin.
 
+- ~~Account switcher: log in and out of your ChatGPT account~~
 - Account saver: persist multiple Codex auth profiles.
 - Easy switching: one-click switch between saved accounts; optional auto-switch when limits hit.
-- ~~Dim mode~~
+- ~~Theme: Dim mode~~
 - ~~Usage-left toggle differs~~
-- Windows XP theme: Luna-inspired XP styling option for the UI.
+- Theme: Winodws XP styling option for the UI.
+
+
+<img width="2882" height="1732" alt="CleanShot 2026-02-07 at 22 14 15" src="https://github.com/user-attachments/assets/31efd632-aed0-4bca-b45b-9d5d959b18f3" />
+
 
 ## Features
 
