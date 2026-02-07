@@ -10,9 +10,10 @@ Strikethrough means the item has landed in origin.
 
 - ~~Account switcher: log in and out of your ChatGPT account~~
 - Account saver: persist multiple Codex auth profiles.
-- Easy switching: one-click switch between saved accounts; optional auto-switch when limits hit.
+- Easy switching: one-click switch between saved accounts
+- Toggle: optional auto-switch between accounts when plan limits hit.
+- ~~Toggle: show whats left instead of used for plan limits~~
 - ~~Theme: Dim mode~~
-- ~~Usage-left toggle differs~~
 - Theme: Winodws XP styling option for the UI.
 
 
