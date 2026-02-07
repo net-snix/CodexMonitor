@@ -16,7 +16,7 @@ Strikethrough means the item has landed in origin.
 - Theme: Winodws XP styling option for the UI.
 
 
-<img width="2882" height="1732" alt="CleanShot 2026-02-07 at 22 14 15" src="https://github.com/user-attachments/assets/31efd632-aed0-4bca-b45b-9d5d959b18f3" />
+<img width="2882" height="1732" alt="CleanShot 2026-02-07 at 22 25 04" src="https://github.com/user-attachments/assets/27121301-e246-496e-97bb-a6aa89ebc419" />
 
 
 ## Features
