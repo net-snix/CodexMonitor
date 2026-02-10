@@ -5,6 +5,7 @@ import { FileDiff, WorkerPoolContextProvider } from "@pierre/diffs/react";
 import type { FileDiffMetadata } from "@pierre/diffs";
 import { parsePatchFiles } from "@pierre/diffs";
 import RotateCcw from "lucide-react/dist/esm/icons/rotate-ccw";
+import GitCommitHorizontal from "lucide-react/dist/esm/icons/git-commit-horizontal";
 import { workerFactory } from "../../../utils/diffsWorker";
 import type { GitHubPullRequest, GitHubPullRequestComment } from "../../../types";
 import { formatRelativeTime } from "../../../utils/time";
@@ -14,6 +15,7 @@ import {
 } from "../../design-system/diff/diffViewerTheme";
 import { Markdown } from "../../messages/components/Markdown";
 import { ImageDiffCard } from "./ImageDiffCard";
+import { splitPath } from "./GitDiffPanel.utils";
 
 type GitDiffViewerItem = {
   path: string;
@@ -71,6 +73,8 @@ const DiffCard = memo(function DiffCard({
   showRevert,
   onRequestRevert,
 }: DiffCardProps) {
+  const { name: fileName, dir } = useMemo(() => splitPath(entry.path), [entry.path]);
+  const displayDir = dir ? `${dir}/` : "";
   const diffOptions = useMemo(
     () => ({
       diffStyle,
@@ -123,7 +127,10 @@ const DiffCard = memo(function DiffCard({
         <span className="diff-viewer-status" data-status={entry.status}>
           {entry.status}
         </span>
-        <span className="diff-viewer-path">{entry.path}</span>
+        <span className="diff-viewer-path" title={entry.path}>
+          <span className="diff-viewer-name">{fileName}</span>
+          {displayDir && <span className="diff-viewer-dir">{displayDir}</span>}
+        </span>
         {showRevert && (
           <button
             type="button"
@@ -427,6 +434,13 @@ export function GitDiffViewer({
     }
     return diffs[0];
   }, [diffs, selectedPath, indexByPath]);
+  const stickyPathDisplay = useMemo(() => {
+    if (!stickyEntry) {
+      return null;
+    }
+    const { name, dir } = splitPath(stickyEntry.path);
+    return { fileName: name, displayDir: dir ? `${dir}/` : "" };
+  }, [stickyEntry]);
 
   const showRevert = canRevert && Boolean(onRevertFile);
   const handleRequestRevert = useCallback(
@@ -581,6 +595,18 @@ export function GitDiffViewer({
     }
     rowVirtualizer.scrollToIndex(0, { align: "start" });
   }, [diffs.length, rowVirtualizer]);
+  const emptyStateCopy = pullRequest
+    ? {
+        title: "No file changes in this pull request",
+        subtitle:
+          "The pull request loaded, but there are no diff hunks to render for this selection.",
+        hint: "Try switching to another pull request or commit from the Git panel.",
+      }
+    : {
+        title: "Working tree is clean",
+        subtitle: "No local changes were detected for the current workspace.",
+        hint: "Make an edit, stage a file, or select a commit to inspect changes here.",
+      };
 
   return (
     <WorkerPoolContextProvider
@@ -608,7 +634,14 @@ export function GitDiffViewer({
               >
                 {stickyEntry.status}
               </span>
-              <span className="diff-viewer-path">{stickyEntry.path}</span>
+              <span className="diff-viewer-path" title={stickyEntry.path}>
+                <span className="diff-viewer-name">
+                  {stickyPathDisplay?.fileName ?? stickyEntry.path}
+                </span>
+                {stickyPathDisplay?.displayDir && (
+                  <span className="diff-viewer-dir">{stickyPathDisplay.displayDir}</span>
+                )}
+              </span>
               {showRevert && (
                 <button
                   type="button"
@@ -634,7 +667,15 @@ export function GitDiffViewer({
           </div>
         )}
         {!error && !isLoading && !diffs.length && (
-          <div className="diff-viewer-empty">No changes detected.</div>
+          <div className="diff-viewer-empty-state" role="status" aria-live="polite">
+            <div className="diff-viewer-empty-glow" aria-hidden />
+            <span className="diff-viewer-empty-icon" aria-hidden>
+              <GitCommitHorizontal size={18} />
+            </span>
+            <h3 className="diff-viewer-empty-title">{emptyStateCopy.title}</h3>
+            <p className="diff-viewer-empty-subtitle">{emptyStateCopy.subtitle}</p>
+            <p className="diff-viewer-empty-hint">{emptyStateCopy.hint}</p>
+          </div>
         )}
         {!error && diffs.length > 0 && (
           <div

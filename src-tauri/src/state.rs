@@ -8,11 +8,15 @@ use tokio::sync::Mutex;
 use crate::dictation::DictationState;
 use crate::shared::codex_core::CodexLoginCancelState;
 use crate::storage::{read_settings, read_workspaces};
-use crate::types::{AppSettings, OrbitRunnerState, OrbitRunnerStatus, WorkspaceEntry};
+use crate::types::{
+    AppSettings, OrbitRunnerState, OrbitRunnerStatus, TcpDaemonState, TcpDaemonStatus,
+    WorkspaceEntry,
+};
 
 pub(crate) struct OrbitRunnerRuntime {
     pub(crate) child: Option<Child>,
     pub(crate) status: OrbitRunnerStatus,
+    pub(crate) managed_version: Option<String>,
 }
 
 impl Default for OrbitRunnerRuntime {
@@ -25,6 +29,27 @@ impl Default for OrbitRunnerRuntime {
                 started_at_ms: None,
                 last_error: None,
                 orbit_url: None,
+            },
+            managed_version: None,
+        }
+    }
+}
+
+pub(crate) struct TcpDaemonRuntime {
+    pub(crate) child: Option<Child>,
+    pub(crate) status: TcpDaemonStatus,
+}
+
+impl Default for TcpDaemonRuntime {
+    fn default() -> Self {
+        Self {
+            child: None,
+            status: TcpDaemonStatus {
+                state: TcpDaemonState::Stopped,
+                pid: None,
+                started_at_ms: None,
+                last_error: None,
+                listen_addr: None,
             },
         }
     }
@@ -41,6 +66,7 @@ pub(crate) struct AppState {
     pub(crate) dictation: Mutex<DictationState>,
     pub(crate) codex_login_cancels: Mutex<HashMap<String, CodexLoginCancelState>>,
     pub(crate) orbit_runner: Mutex<OrbitRunnerRuntime>,
+    pub(crate) tcp_daemon: Mutex<TcpDaemonRuntime>,
 }
 
 impl AppState {
@@ -64,6 +90,7 @@ impl AppState {
             dictation: Mutex::new(DictationState::default()),
             codex_login_cancels: Mutex::new(HashMap::new()),
             orbit_runner: Mutex::new(OrbitRunnerRuntime::default()),
+            tcp_daemon: Mutex::new(TcpDaemonRuntime::default()),
         }
     }
 }

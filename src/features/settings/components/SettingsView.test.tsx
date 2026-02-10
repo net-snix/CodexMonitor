@@ -11,6 +11,7 @@ import {
 import type { ComponentProps } from "react";
 import { describe, expect, it, vi } from "vitest";
 import type { AppSettings, WorkspaceInfo } from "../../../types";
+import { DEFAULT_COMMIT_MESSAGE_PROMPT } from "../../../utils/commitMessagePrompt";
 import { SettingsView } from "./SettingsView";
 
 vi.mock("@tauri-apps/plugin-dialog", () => ({
@@ -29,6 +30,7 @@ const baseSettings: AppSettings = {
   orbitAuthUrl: null,
   orbitRunnerName: null,
   orbitAutoStartRunner: false,
+  keepDaemonRunningAfterAppClose: false,
   orbitUseAccess: false,
   orbitAccessClientId: null,
   orbitAccessClientSecretRef: null,
@@ -58,6 +60,7 @@ const baseSettings: AppSettings = {
   theme: "system",
   usageShowRemaining: false,
   showMessageFilePath: true,
+  threadTitleAutogenerationEnabled: false,
   uiFontFamily:
     'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
   codeFontFamily:
@@ -65,8 +68,10 @@ const baseSettings: AppSettings = {
   codeFontSize: 11,
   notificationSoundsEnabled: true,
   systemNotificationsEnabled: true,
+  splitChatDiffView: false,
   preloadGitDiffs: true,
   gitDiffIgnoreWhitespaceChanges: false,
+  commitMessagePrompt: DEFAULT_COMMIT_MESSAGE_PROMPT,
   experimentalCollabEnabled: false,
   collaborationModesEnabled: true,
   steerEnabled: true,
@@ -110,6 +115,17 @@ const createDoctorResult = () => ({
   nodeOk: true,
   nodeVersion: null,
   nodeDetails: null,
+});
+
+const createUpdateResult = () => ({
+  ok: true,
+  method: "brew_formula" as const,
+  package: "codex",
+  beforeVersion: "codex 0.0.0",
+  afterVersion: "codex 0.0.1",
+  upgraded: true,
+  output: null,
+  details: null,
 });
 
 const renderDisplaySection = (
@@ -367,6 +383,29 @@ describe("SettingsView Display", () => {
     });
   });
 
+  it("toggles split chat and diff center panes", async () => {
+    const onUpdateAppSettings = vi.fn().mockResolvedValue(undefined);
+    renderDisplaySection({ onUpdateAppSettings });
+
+    const row = screen
+      .getByText("Split chat and diff center panes")
+      .closest(".settings-toggle-row") as HTMLElement | null;
+    if (!row) {
+      throw new Error("Expected split center panes row");
+    }
+    const toggle = row.querySelector("button.settings-toggle") as HTMLButtonElement | null;
+    if (!toggle) {
+      throw new Error("Expected split center panes toggle");
+    }
+    fireEvent.click(toggle);
+
+    await waitFor(() => {
+      expect(onUpdateAppSettings).toHaveBeenCalledWith(
+        expect.objectContaining({ splitChatDiffView: true }),
+      );
+    });
+  });
+
   it("toggles reduce transparency", async () => {
     const onToggleTransparency = vi.fn();
     renderDisplaySection({ onToggleTransparency, reduceTransparency: false });
@@ -600,6 +639,7 @@ describe("SettingsView Codex overrides", () => {
         openAppIconById={{}}
         onUpdateAppSettings={vi.fn().mockResolvedValue(undefined)}
         onRunDoctor={vi.fn().mockResolvedValue(createDoctorResult())}
+        onRunCodexUpdate={vi.fn().mockResolvedValue(createUpdateResult())}
         onUpdateWorkspaceCodexBin={vi.fn().mockResolvedValue(undefined)}
         onUpdateWorkspaceSettings={onUpdateWorkspaceSettings}
         scaleShortcutTitle="Scale shortcut"
@@ -647,6 +687,7 @@ describe("SettingsView Codex overrides", () => {
         openAppIconById={{}}
         onUpdateAppSettings={onUpdateAppSettings}
         onRunDoctor={vi.fn().mockResolvedValue(createDoctorResult())}
+        onRunCodexUpdate={vi.fn().mockResolvedValue(createUpdateResult())}
         onUpdateWorkspaceCodexBin={vi.fn().mockResolvedValue(undefined)}
         onUpdateWorkspaceSettings={vi.fn().mockResolvedValue(undefined)}
         scaleShortcutTitle="Scale shortcut"
@@ -672,7 +713,7 @@ describe("SettingsView Codex overrides", () => {
     });
   });
 
-  it("renders Orbit controls in remote mode for Orbit provider", async () => {
+  it("renders Orbit controls for Orbit provider even in local backend mode", async () => {
     cleanup();
     render(
       <SettingsView
@@ -691,7 +732,7 @@ describe("SettingsView Codex overrides", () => {
         onToggleTransparency={vi.fn()}
         appSettings={{
           ...baseSettings,
-          backendMode: "remote",
+          backendMode: "local",
           remoteBackendProvider: "orbit",
         }}
         openAppIconById={{}}
@@ -707,7 +748,7 @@ describe("SettingsView Codex overrides", () => {
         onDownloadDictationModel={vi.fn()}
         onCancelDictationDownload={vi.fn()}
         onRemoveDictationModel={vi.fn()}
-        initialSection="codex"
+        initialSection="server"
       />,
     );
 
@@ -724,6 +765,160 @@ describe("SettingsView Codex overrides", () => {
       expect(screen.getByRole("button", { name: "Stop Runner" })).toBeTruthy();
       expect(screen.getByRole("button", { name: "Refresh Status" })).toBeTruthy();
     });
+  });
+
+  it("renders mobile daemon controls in local backend mode for TCP provider", async () => {
+    cleanup();
+    render(
+      <SettingsView
+        workspaceGroups={[]}
+        groupedWorkspaces={[]}
+        ungroupedLabel="Ungrouped"
+        onClose={vi.fn()}
+        onMoveWorkspace={vi.fn()}
+        onDeleteWorkspace={vi.fn()}
+        onCreateWorkspaceGroup={vi.fn().mockResolvedValue(null)}
+        onRenameWorkspaceGroup={vi.fn().mockResolvedValue(null)}
+        onMoveWorkspaceGroup={vi.fn().mockResolvedValue(null)}
+        onDeleteWorkspaceGroup={vi.fn().mockResolvedValue(null)}
+        onAssignWorkspaceGroup={vi.fn().mockResolvedValue(null)}
+        reduceTransparency={false}
+        onToggleTransparency={vi.fn()}
+        appSettings={{
+          ...baseSettings,
+          backendMode: "local",
+          remoteBackendProvider: "tcp",
+        }}
+        openAppIconById={{}}
+        onUpdateAppSettings={vi.fn().mockResolvedValue(undefined)}
+        onRunDoctor={vi.fn().mockResolvedValue(createDoctorResult())}
+        onUpdateWorkspaceCodexBin={vi.fn().mockResolvedValue(undefined)}
+        onUpdateWorkspaceSettings={vi.fn().mockResolvedValue(undefined)}
+        scaleShortcutTitle="Scale shortcut"
+        scaleShortcutText="Use Command +/-"
+        onTestNotificationSound={vi.fn()}
+        onTestSystemNotification={vi.fn()}
+        dictationModelStatus={null}
+        onDownloadDictationModel={vi.fn()}
+        onCancelDictationDownload={vi.fn()}
+        onRemoveDictationModel={vi.fn()}
+        initialSection="server"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Start daemon" })).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Stop daemon" })).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Refresh status" })).toBeTruthy();
+      expect(screen.getByLabelText("Remote backend host")).toBeTruthy();
+      expect(screen.getByLabelText("Remote backend token")).toBeTruthy();
+    });
+  });
+
+  it("shows mobile-only server controls on iOS runtime", async () => {
+    cleanup();
+    const originalPlatformDescriptor = Object.getOwnPropertyDescriptor(
+      window.navigator,
+      "platform",
+    );
+    const originalUserAgentDescriptor = Object.getOwnPropertyDescriptor(
+      window.navigator,
+      "userAgent",
+    );
+    const originalTouchPointsDescriptor = Object.getOwnPropertyDescriptor(
+      window.navigator,
+      "maxTouchPoints",
+    );
+
+    Object.defineProperty(window.navigator, "platform", {
+      configurable: true,
+      value: "iPhone",
+    });
+    Object.defineProperty(window.navigator, "userAgent", {
+      configurable: true,
+      value:
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148",
+    });
+    Object.defineProperty(window.navigator, "maxTouchPoints", {
+      configurable: true,
+      value: 5,
+    });
+
+    try {
+      render(
+        <SettingsView
+          workspaceGroups={[]}
+          groupedWorkspaces={[]}
+          ungroupedLabel="Ungrouped"
+          onClose={vi.fn()}
+          onMoveWorkspace={vi.fn()}
+          onDeleteWorkspace={vi.fn()}
+          onCreateWorkspaceGroup={vi.fn().mockResolvedValue(null)}
+          onRenameWorkspaceGroup={vi.fn().mockResolvedValue(null)}
+          onMoveWorkspaceGroup={vi.fn().mockResolvedValue(null)}
+          onDeleteWorkspaceGroup={vi.fn().mockResolvedValue(null)}
+          onAssignWorkspaceGroup={vi.fn().mockResolvedValue(null)}
+          reduceTransparency={false}
+          onToggleTransparency={vi.fn()}
+          appSettings={{
+            ...baseSettings,
+            backendMode: "local",
+            remoteBackendProvider: "orbit",
+          }}
+          openAppIconById={{}}
+          onUpdateAppSettings={vi.fn().mockResolvedValue(undefined)}
+          onRunDoctor={vi.fn().mockResolvedValue(createDoctorResult())}
+          onUpdateWorkspaceCodexBin={vi.fn().mockResolvedValue(undefined)}
+          onUpdateWorkspaceSettings={vi.fn().mockResolvedValue(undefined)}
+          scaleShortcutTitle="Scale shortcut"
+          scaleShortcutText="Use Command +/-"
+          onTestNotificationSound={vi.fn()}
+          onTestSystemNotification={vi.fn()}
+          dictationModelStatus={null}
+          onDownloadDictationModel={vi.fn()}
+          onCancelDictationDownload={vi.fn()}
+          onRemoveDictationModel={vi.fn()}
+          initialSection="server"
+        />,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByLabelText("Connection type")).toBeTruthy();
+        expect(screen.getByLabelText("Orbit websocket URL")).toBeTruthy();
+        expect(screen.getByLabelText("Remote backend token")).toBeTruthy();
+        expect(screen.getByRole("button", { name: "Connect & test" })).toBeTruthy();
+      });
+
+      expect(screen.queryByLabelText("Backend mode")).toBeNull();
+      expect(screen.queryByRole("button", { name: "Start daemon" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Detect Tailscale" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Connect test" })).toBeNull();
+      expect(screen.queryByLabelText("Remote backend host")).toBeNull();
+      expect(screen.queryByRole("button", { name: "Sign In" })).toBeNull();
+      expect(
+        screen.getByText(/use the orbit websocket url and token configured/i),
+      ).toBeTruthy();
+    } finally {
+      if (originalPlatformDescriptor) {
+        Object.defineProperty(window.navigator, "platform", originalPlatformDescriptor);
+      } else {
+        Reflect.deleteProperty(window.navigator, "platform");
+      }
+      if (originalUserAgentDescriptor) {
+        Object.defineProperty(window.navigator, "userAgent", originalUserAgentDescriptor);
+      } else {
+        Reflect.deleteProperty(window.navigator, "userAgent");
+      }
+      if (originalTouchPointsDescriptor) {
+        Object.defineProperty(
+          window.navigator,
+          "maxTouchPoints",
+          originalTouchPointsDescriptor,
+        );
+      } else {
+        Reflect.deleteProperty(window.navigator, "maxTouchPoints");
+      }
+    }
   });
 
   it("polls Orbit sign-in using deviceCode until authorized", async () => {
@@ -817,7 +1012,7 @@ describe("SettingsView Codex overrides", () => {
         onDownloadDictationModel={vi.fn()}
         onCancelDictationDownload={vi.fn()}
         onRemoveDictationModel={vi.fn()}
-        initialSection="codex"
+        initialSection="server"
         orbitServiceClient={orbitServiceClient}
       />,
     );
@@ -863,7 +1058,7 @@ describe("SettingsView Codex overrides", () => {
         onDownloadDictationModel={vi.fn()}
         onCancelDictationDownload={vi.fn()}
         onRemoveDictationModel={vi.fn()}
-        initialSection="codex"
+        initialSection="server"
         orbitServiceClient={orbitServiceClient}
       />,
     );
@@ -951,7 +1146,7 @@ describe("SettingsView Codex overrides", () => {
         onDownloadDictationModel={vi.fn()}
         onCancelDictationDownload={vi.fn()}
         onRemoveDictationModel={vi.fn()}
-        initialSection="codex"
+        initialSection="server"
         orbitServiceClient={orbitServiceClient}
       />,
     );
@@ -1041,7 +1236,7 @@ describe("SettingsView Codex overrides", () => {
         onDownloadDictationModel={vi.fn()}
         onCancelDictationDownload={vi.fn()}
         onRemoveDictationModel={vi.fn()}
-        initialSection="codex"
+        initialSection="server"
         orbitServiceClient={orbitServiceClient}
       />,
     );
@@ -1124,6 +1319,153 @@ describe("SettingsView Features", () => {
         expect.objectContaining({ unifiedExecEnabled: false }),
       );
     });
+  });
+});
+
+describe("SettingsView mobile layout", () => {
+  it("uses a master/detail flow on narrow mobile widths", async () => {
+    cleanup();
+    const originalMatchMedia = window.matchMedia;
+    const originalPlatformDescriptor = Object.getOwnPropertyDescriptor(
+      window.navigator,
+      "platform",
+    );
+    const originalUserAgentDescriptor = Object.getOwnPropertyDescriptor(
+      window.navigator,
+      "userAgent",
+    );
+    const originalTouchPointsDescriptor = Object.getOwnPropertyDescriptor(
+      window.navigator,
+      "maxTouchPoints",
+    );
+
+    Object.defineProperty(window, "matchMedia", {
+      configurable: true,
+      writable: true,
+      value: vi.fn().mockImplementation((query: string) => ({
+        matches: query.includes("max-width: 720px"),
+        media: query,
+        onchange: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    });
+    Object.defineProperty(window.navigator, "platform", {
+      configurable: true,
+      value: "iPhone",
+    });
+    Object.defineProperty(window.navigator, "userAgent", {
+      configurable: true,
+      value:
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148",
+    });
+    Object.defineProperty(window.navigator, "maxTouchPoints", {
+      configurable: true,
+      value: 5,
+    });
+
+    try {
+      const rendered = render(
+        <SettingsView
+          workspaceGroups={[]}
+          groupedWorkspaces={[]}
+          ungroupedLabel="Ungrouped"
+          onClose={vi.fn()}
+          onMoveWorkspace={vi.fn()}
+          onDeleteWorkspace={vi.fn()}
+          onCreateWorkspaceGroup={vi.fn().mockResolvedValue(null)}
+          onRenameWorkspaceGroup={vi.fn().mockResolvedValue(null)}
+          onMoveWorkspaceGroup={vi.fn().mockResolvedValue(null)}
+          onDeleteWorkspaceGroup={vi.fn().mockResolvedValue(null)}
+          onAssignWorkspaceGroup={vi.fn().mockResolvedValue(null)}
+          reduceTransparency={false}
+          onToggleTransparency={vi.fn()}
+          appSettings={baseSettings}
+          openAppIconById={{}}
+          onUpdateAppSettings={vi.fn().mockResolvedValue(undefined)}
+          onRunDoctor={vi.fn().mockResolvedValue(createDoctorResult())}
+          onUpdateWorkspaceCodexBin={vi.fn().mockResolvedValue(undefined)}
+          onUpdateWorkspaceSettings={vi.fn().mockResolvedValue(undefined)}
+          scaleShortcutTitle="Scale shortcut"
+          scaleShortcutText="Use Command +/-"
+          onTestNotificationSound={vi.fn()}
+          onTestSystemNotification={vi.fn()}
+          dictationModelStatus={null}
+          onDownloadDictationModel={vi.fn()}
+          onCancelDictationDownload={vi.fn()}
+          onRemoveDictationModel={vi.fn()}
+        />,
+      );
+
+      expect(
+        within(rendered.container).queryByText("Sections"),
+      ).toBeNull();
+      expect(
+        rendered.container.querySelectorAll(".ds-panel-nav-item-disclosure")
+          .length,
+      ).toBeGreaterThan(0);
+
+      fireEvent.click(
+        within(rendered.container).getByRole("button", {
+          name: "Display & Sound",
+        }),
+      );
+
+      await waitFor(() => {
+        expect(
+          within(rendered.container).getByRole("button", {
+            name: "Back to settings sections",
+          }),
+        ).toBeTruthy();
+        expect(
+          within(rendered.container).getByText("Display & Sound", {
+            selector: ".settings-mobile-detail-title",
+          }),
+        ).toBeTruthy();
+      });
+
+      fireEvent.click(
+        within(rendered.container).getByRole("button", {
+          name: "Back to settings sections",
+        }),
+      );
+
+      await waitFor(() => {
+        expect(within(rendered.container).queryByText("Sections")).toBeNull();
+      });
+    } finally {
+      if (originalMatchMedia) {
+        Object.defineProperty(window, "matchMedia", {
+          configurable: true,
+          writable: true,
+          value: originalMatchMedia,
+        });
+      } else {
+        Reflect.deleteProperty(window, "matchMedia");
+      }
+      if (originalPlatformDescriptor) {
+        Object.defineProperty(window.navigator, "platform", originalPlatformDescriptor);
+      } else {
+        Reflect.deleteProperty(window.navigator, "platform");
+      }
+      if (originalUserAgentDescriptor) {
+        Object.defineProperty(window.navigator, "userAgent", originalUserAgentDescriptor);
+      } else {
+        Reflect.deleteProperty(window.navigator, "userAgent");
+      }
+      if (originalTouchPointsDescriptor) {
+        Object.defineProperty(
+          window.navigator,
+          "maxTouchPoints",
+          originalTouchPointsDescriptor,
+        );
+      } else {
+        Reflect.deleteProperty(window.navigator, "maxTouchPoints");
+      }
+    }
   });
 });
 

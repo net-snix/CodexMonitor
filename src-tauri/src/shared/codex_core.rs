@@ -1,5 +1,5 @@
 use serde_json::{json, Map, Value};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -102,7 +102,14 @@ pub(crate) async fn list_threads_core(
     sort_key: Option<String>,
 ) -> Result<Value, String> {
     let session = get_session_clone(sessions, &workspace_id).await?;
-    let params = json!({ "cursor": cursor, "limit": limit, "sortKey": sort_key });
+    let params = json!({
+        "cursor": cursor,
+        "limit": limit,
+        "sortKey": sort_key,
+        // Keep spawned sub-agent sessions visible in thread/list so UI refreshes
+        // do not drop parent -> child sidebar relationships.
+        "sourceKinds": ["cli", "vscode", "subAgentThreadSpawn"]
+    });
     session.send_request("thread/list", params).await
 }
 
@@ -148,35 +155,11 @@ pub(crate) async fn set_thread_name_core(
     session.send_request("thread/name/set", params).await
 }
 
-pub(crate) async fn send_user_message_core(
-    sessions: &Mutex<HashMap<String, Arc<WorkspaceSession>>>,
-    workspace_id: String,
-    thread_id: String,
+fn build_turn_input_items(
     text: String,
-    model: Option<String>,
-    effort: Option<String>,
-    access_mode: Option<String>,
     images: Option<Vec<String>>,
-    collaboration_mode: Option<Value>,
-) -> Result<Value, String> {
-    let session = get_session_clone(sessions, &workspace_id).await?;
-    let access_mode = access_mode.unwrap_or_else(|| "current".to_string());
-    let sandbox_policy = match access_mode.as_str() {
-        "full-access" => json!({ "type": "dangerFullAccess" }),
-        "read-only" => json!({ "type": "readOnly" }),
-        _ => json!({
-            "type": "workspaceWrite",
-            "writableRoots": [session.entry.path],
-            "networkAccess": true
-        }),
-    };
-
-    let approval_policy = if access_mode == "full-access" {
-        "never"
-    } else {
-        "on-request"
-    };
-
+    app_mentions: Option<Vec<Value>>,
+) -> Result<Vec<Value>, String> {
     let trimmed_text = text.trim();
     let mut input: Vec<Value> = Vec::new();
     if !trimmed_text.is_empty() {
@@ -198,9 +181,70 @@ pub(crate) async fn send_user_message_core(
             }
         }
     }
+    if let Some(mentions) = app_mentions {
+        let mut seen_paths: HashSet<String> = HashSet::new();
+        for mention in mentions {
+            let object = mention
+                .as_object()
+                .ok_or_else(|| "invalid app mention payload".to_string())?;
+            let name = object
+                .get("name")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .ok_or_else(|| "invalid app mention name".to_string())?;
+            let path = object
+                .get("path")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .ok_or_else(|| "invalid app mention path".to_string())?;
+            if !path.starts_with("app://") || path.len() <= "app://".len() {
+                return Err("invalid app mention path".to_string());
+            }
+            if !seen_paths.insert(path.to_string()) {
+                continue;
+            }
+            input.push(json!({ "type": "mention", "name": name, "path": path }));
+        }
+    }
     if input.is_empty() {
         return Err("empty user message".to_string());
     }
+    Ok(input)
+}
+
+pub(crate) async fn send_user_message_core(
+    sessions: &Mutex<HashMap<String, Arc<WorkspaceSession>>>,
+    workspace_id: String,
+    thread_id: String,
+    text: String,
+    model: Option<String>,
+    effort: Option<String>,
+    access_mode: Option<String>,
+    images: Option<Vec<String>>,
+    app_mentions: Option<Vec<Value>>,
+    collaboration_mode: Option<Value>,
+) -> Result<Value, String> {
+    let session = get_session_clone(sessions, &workspace_id).await?;
+    let access_mode = access_mode.unwrap_or_else(|| "current".to_string());
+    let sandbox_policy = match access_mode.as_str() {
+        "full-access" => json!({ "type": "dangerFullAccess" }),
+        "read-only" => json!({ "type": "readOnly" }),
+        _ => json!({
+            "type": "workspaceWrite",
+            "writableRoots": [session.entry.path],
+            "networkAccess": true
+        }),
+    };
+
+    let approval_policy = if access_mode == "full-access" {
+        "never"
+    } else {
+        "on-request"
+    };
+
+    let input = build_turn_input_items(text, images, app_mentions)?;
 
     let mut params = Map::new();
     params.insert("threadId".to_string(), json!(thread_id));
@@ -218,6 +262,28 @@ pub(crate) async fn send_user_message_core(
     session
         .send_request("turn/start", Value::Object(params))
         .await
+}
+
+pub(crate) async fn turn_steer_core(
+    sessions: &Mutex<HashMap<String, Arc<WorkspaceSession>>>,
+    workspace_id: String,
+    thread_id: String,
+    turn_id: String,
+    text: String,
+    images: Option<Vec<String>>,
+    app_mentions: Option<Vec<Value>>,
+) -> Result<Value, String> {
+    if turn_id.trim().is_empty() {
+        return Err("missing active turn id".to_string());
+    }
+    let session = get_session_clone(sessions, &workspace_id).await?;
+    let input = build_turn_input_items(text, images, app_mentions)?;
+    let params = json!({
+        "threadId": thread_id,
+        "expectedTurnId": turn_id,
+        "input": input
+    });
+    session.send_request("turn/steer", params).await
 }
 
 pub(crate) async fn collaboration_mode_list_core(
@@ -453,9 +519,10 @@ pub(crate) async fn apps_list_core(
     workspace_id: String,
     cursor: Option<String>,
     limit: Option<u32>,
+    thread_id: Option<String>,
 ) -> Result<Value, String> {
     let session = get_session_clone(sessions, &workspace_id).await?;
-    let params = json!({ "cursor": cursor, "limit": limit });
+    let params = json!({ "cursor": cursor, "limit": limit, "threadId": thread_id });
     session.send_request("app/list", params).await
 }
 

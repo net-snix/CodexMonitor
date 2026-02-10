@@ -153,6 +153,7 @@ export type AppSettings = {
   orbitAuthUrl: string | null;
   orbitRunnerName: string | null;
   orbitAutoStartRunner: boolean;
+  keepDaemonRunningAfterAppClose: boolean;
   orbitUseAccess: boolean;
   orbitAccessClientId: string | null;
   orbitAccessClientSecretRef: string | null;
@@ -182,13 +183,16 @@ export type AppSettings = {
   theme: ThemePreference;
   usageShowRemaining: boolean;
   showMessageFilePath: boolean;
+  threadTitleAutogenerationEnabled: boolean;
   uiFontFamily: string;
   codeFontFamily: string;
   codeFontSize: number;
   notificationSoundsEnabled: boolean;
   systemNotificationsEnabled: boolean;
+  splitChatDiffView: boolean;
   preloadGitDiffs: boolean;
   gitDiffIgnoreWhitespaceChanges: boolean;
+  commitMessagePrompt: string;
   experimentalCollabEnabled: boolean;
   collaborationModesEnabled: boolean;
   steerEnabled: boolean;
@@ -258,6 +262,16 @@ export type OrbitRunnerStatus = {
   orbitUrl: string | null;
 };
 
+export type TcpDaemonState = "stopped" | "running" | "error";
+
+export type TcpDaemonStatus = {
+  state: TcpDaemonState;
+  pid: number | null;
+  startedAtMs: number | null;
+  lastError: string | null;
+  listenAddr: string | null;
+};
+
 export type TailscaleStatus = {
   installed: boolean;
   running: boolean;
@@ -288,6 +302,19 @@ export type CodexDoctorResult = {
   nodeOk: boolean;
   nodeVersion: string | null;
   nodeDetails: string | null;
+};
+
+export type CodexUpdateMethod = "brew_formula" | "brew_cask" | "npm" | "unknown";
+
+export type CodexUpdateResult = {
+  ok: boolean;
+  method: CodexUpdateMethod;
+  package: string | null;
+  beforeVersion: string | null;
+  afterVersion: string | null;
+  upgraded: boolean;
+  output: string | null;
+  details: string | null;
 };
 
 export type ApprovalRequest = {
@@ -520,6 +547,12 @@ export type QueuedMessage = {
   text: string;
   createdAt: number;
   images?: string[];
+  appMentions?: AppMention[];
+};
+
+export type AppMention = {
+  name: string;
+  path: string;
 };
 
 export type ModelOption = {

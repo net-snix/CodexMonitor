@@ -1,11 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
+import { open } from "@tauri-apps/plugin-dialog";
 import * as notification from "@tauri-apps/plugin-notification";
 import {
   addWorkspace,
   compactThread,
   fetchGit,
   forkThread,
+  getAppsList,
   getGitHubIssues,
   getGitLog,
   getGitStatus,
@@ -27,11 +29,16 @@ import {
   respondToServerRequest,
   respondToUserInputRequest,
   sendUserMessage,
+  steerTurn,
   sendNotification,
   startReview,
   setThreadName,
+  tailscaleDaemonStart,
   tailscaleDaemonCommandPreview,
+  tailscaleDaemonStatus,
+  tailscaleDaemonStop,
   tailscaleStatus,
+  pickWorkspacePaths,
   writeGlobalAgentsMd,
   writeGlobalCodexConfigToml,
   writeAgentMd,
@@ -39,6 +46,10 @@ import {
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(),
+}));
+
+vi.mock("@tauri-apps/plugin-dialog", () => ({
+  open: vi.fn(),
 }));
 
 vi.mock("@tauri-apps/plugin-notification", () => ({
@@ -69,6 +80,27 @@ describe("tauri invoke wrappers", () => {
       path: "/tmp/project",
       codex_bin: null,
     });
+  });
+
+  it("returns an empty list when workspace picker is cancelled", async () => {
+    const openMock = vi.mocked(open);
+    openMock.mockResolvedValueOnce(null);
+
+    await expect(pickWorkspacePaths()).resolves.toEqual([]);
+  });
+
+  it("wraps a single workspace selection in an array", async () => {
+    const openMock = vi.mocked(open);
+    openMock.mockResolvedValueOnce("/tmp/project");
+
+    await expect(pickWorkspacePaths()).resolves.toEqual(["/tmp/project"]);
+  });
+
+  it("returns multiple workspace selections as-is", async () => {
+    const openMock = vi.mocked(open);
+    openMock.mockResolvedValueOnce(["/tmp/one", "/tmp/two"]);
+
+    await expect(pickWorkspacePaths()).resolves.toEqual(["/tmp/one", "/tmp/two"]);
   });
 
   it("maps workspace_id to workspaceId for git status", async () => {
@@ -180,6 +212,20 @@ describe("tauri invoke wrappers", () => {
     });
   });
 
+  it("maps workspaceId/cursor/limit/threadId for apps_list", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce({});
+
+    await getAppsList("ws-11", "cursor-1", 25, "thread-11");
+
+    expect(invokeMock).toHaveBeenCalledWith("apps_list", {
+      workspaceId: "ws-11",
+      cursor: "cursor-1",
+      limit: 25,
+      threadId: "thread-11",
+    });
+  });
+
   it("invokes stage_git_all", async () => {
     const invokeMock = vi.mocked(invoke);
     invokeMock.mockResolvedValueOnce({});
@@ -259,9 +305,15 @@ describe("tauri invoke wrappers", () => {
 
     await tailscaleStatus();
     await tailscaleDaemonCommandPreview();
+    await tailscaleDaemonStart();
+    await tailscaleDaemonStop();
+    await tailscaleDaemonStatus();
 
     expect(invokeMock).toHaveBeenCalledWith("tailscale_status");
     expect(invokeMock).toHaveBeenCalledWith("tailscale_daemon_command_preview");
+    expect(invokeMock).toHaveBeenCalledWith("tailscale_daemon_start");
+    expect(invokeMock).toHaveBeenCalledWith("tailscale_daemon_stop");
+    expect(invokeMock).toHaveBeenCalledWith("tailscale_daemon_status");
   });
 
   it("reads agent.md for a workspace", async () => {
@@ -361,6 +413,41 @@ describe("tauri invoke wrappers", () => {
       model: null,
       effort: null,
       accessMode: "full-access",
+      images: ["image.png"],
+    });
+  });
+
+  it("includes app mentions when sending a message", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce({});
+
+    await sendUserMessage("ws-4", "thread-1", "hello $calendar", {
+      appMentions: [{ name: "Calendar", path: "app://connector_calendar" }],
+    });
+
+    expect(invokeMock).toHaveBeenCalledWith("send_user_message", {
+      workspaceId: "ws-4",
+      threadId: "thread-1",
+      text: "hello $calendar",
+      model: null,
+      effort: null,
+      accessMode: null,
+      images: null,
+      appMentions: [{ name: "Calendar", path: "app://connector_calendar" }],
+    });
+  });
+
+  it("invokes turn_steer for steer payloads", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce({});
+
+    await steerTurn("ws-4", "thread-1", "turn-2", "continue", ["image.png"]);
+
+    expect(invokeMock).toHaveBeenCalledWith("turn_steer", {
+      workspaceId: "ws-4",
+      threadId: "thread-1",
+      turnId: "turn-2",
+      text: "continue",
       images: ["image.png"],
     });
   });

@@ -3,6 +3,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import type { Options as NotificationOptions } from "@tauri-apps/plugin-notification";
 import type {
   AppSettings,
+  CodexUpdateResult,
   CodexDoctorResult,
   DictationModelStatus,
   DictationSessionState,
@@ -12,9 +13,11 @@ import type {
   OrbitRunnerStatus,
   OrbitSignInPollResult,
   OrbitSignOutResult,
+  TcpDaemonStatus,
   TailscaleDaemonCommandPreview,
   TailscaleStatus,
   WorkspaceInfo,
+  AppMention,
   WorkspaceSettings,
 } from "../types";
 import type {
@@ -43,6 +46,14 @@ export async function pickWorkspacePath(): Promise<string | null> {
     return null;
   }
   return selection;
+}
+
+export async function pickWorkspacePaths(): Promise<string[]> {
+  const selection = await open({ directory: true, multiple: true });
+  if (!selection) {
+    return [];
+  }
+  return Array.isArray(selection) ? selection : [selection];
 }
 
 export async function pickImageFiles(): Promise<string[]> {
@@ -271,6 +282,7 @@ export async function sendUserMessage(
     accessMode?: "read-only" | "current" | "full-access";
     images?: string[];
     collaborationMode?: Record<string, unknown> | null;
+    appMentions?: AppMention[];
   },
 ) {
   const payload: Record<string, unknown> = {
@@ -285,6 +297,9 @@ export async function sendUserMessage(
   if (options?.collaborationMode) {
     payload.collaborationMode = options.collaborationMode;
   }
+  if (options?.appMentions && options.appMentions.length > 0) {
+    payload.appMentions = options.appMentions;
+  }
   return invoke("send_user_message", payload);
 }
 
@@ -294,6 +309,27 @@ export async function interruptTurn(
   turnId: string,
 ) {
   return invoke("turn_interrupt", { workspaceId, threadId, turnId });
+}
+
+export async function steerTurn(
+  workspaceId: string,
+  threadId: string,
+  turnId: string,
+  text: string,
+  images?: string[],
+  appMentions?: AppMention[],
+) {
+  const payload: Record<string, unknown> = {
+    workspaceId,
+    threadId,
+    turnId,
+    text,
+    images: images ?? null,
+  };
+  if (appMentions && appMentions.length > 0) {
+    payload.appMentions = appMentions;
+  }
+  return invoke("turn_steer", payload);
 }
 
 export async function startReview(
@@ -512,8 +548,9 @@ export async function getAppsList(
   workspaceId: string,
   cursor?: string | null,
   limit?: number | null,
+  threadId?: string | null,
 ) {
-  return invoke<any>("apps_list", { workspaceId, cursor, limit });
+  return invoke<any>("apps_list", { workspaceId, cursor, limit, threadId });
 }
 
 export async function getPromptsList(workspaceId: string) {
@@ -587,6 +624,10 @@ export async function getAppSettings(): Promise<AppSettings> {
   return invoke<AppSettings>("get_app_settings");
 }
 
+export async function isMobileRuntime(): Promise<boolean> {
+  return invoke<boolean>("is_mobile_runtime");
+}
+
 export async function updateAppSettings(settings: AppSettings): Promise<AppSettings> {
   return invoke<AppSettings>("update_app_settings", { settings });
 }
@@ -627,6 +668,18 @@ export async function tailscaleDaemonCommandPreview(): Promise<TailscaleDaemonCo
   return invoke<TailscaleDaemonCommandPreview>("tailscale_daemon_command_preview");
 }
 
+export async function tailscaleDaemonStart(): Promise<TcpDaemonStatus> {
+  return invoke<TcpDaemonStatus>("tailscale_daemon_start");
+}
+
+export async function tailscaleDaemonStop(): Promise<TcpDaemonStatus> {
+  return invoke<TcpDaemonStatus>("tailscale_daemon_stop");
+}
+
+export async function tailscaleDaemonStatus(): Promise<TcpDaemonStatus> {
+  return invoke<TcpDaemonStatus>("tailscale_daemon_status");
+}
+
 type MenuAcceleratorUpdate = {
   id: string;
   accelerator: string | null;
@@ -643,6 +696,13 @@ export async function runCodexDoctor(
   codexArgs: string | null,
 ): Promise<CodexDoctorResult> {
   return invoke<CodexDoctorResult>("codex_doctor", { codexBin, codexArgs });
+}
+
+export async function runCodexUpdate(
+  codexBin: string | null,
+  codexArgs: string | null,
+): Promise<CodexUpdateResult> {
+  return invoke<CodexUpdateResult>("codex_update", { codexBin, codexArgs });
 }
 
 export async function getWorkspaceFiles(workspaceId: string) {
@@ -801,12 +861,6 @@ export async function setThreadName(
   name: string,
 ) {
   return invoke<any>("set_thread_name", { workspaceId, threadId, name });
-}
-
-export async function getCommitMessagePrompt(
-  workspaceId: string,
-): Promise<string> {
-  return invoke("get_commit_message_prompt", { workspaceId });
 }
 
 export async function generateCommitMessage(
