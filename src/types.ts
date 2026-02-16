@@ -152,7 +152,7 @@ export type RemoteBackendTarget = {
   token: string | null;
   lastConnectedAtMs?: number | null;
 };
-export type ThemePreference = "system" | "light" | "dark" | "dim";
+export type ThemePreference = "system" | "light" | "dark" | "dim" | "xp";
 export type PersonalityPreference = "friendly" | "pragmatic";
 
 
