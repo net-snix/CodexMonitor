@@ -1,17 +1,23 @@
+import { useEffect, useMemo, useRef } from "react";
 import Stethoscope from "lucide-react/dist/esm/icons/stethoscope";
 import type { Dispatch, SetStateAction } from "react";
 import type {
   AppSettings,
   CodexDoctorResult,
-  TailscaleDaemonCommandPreview,
-  TailscaleStatus,
+  CodexUpdateResult,
+  ModelOption,
   WorkspaceInfo,
-} from "../../../../types";
-import { FileEditorCard } from "../../../shared/components/FileEditorCard";
+} from "@/types";
+import { FileEditorCard } from "@/features/shared/components/FileEditorCard";
 
 type SettingsCodexSectionProps = {
   appSettings: AppSettings;
   onUpdateAppSettings: (next: AppSettings) => Promise<void>;
+  defaultModels: ModelOption[];
+  defaultModelsLoading: boolean;
+  defaultModelsError: string | null;
+  defaultModelsConnectedWorkspaceCount: number;
+  onRefreshDefaultModels: () => void;
   codexPathDraft: string;
   codexArgsDraft: string;
   codexDirty: boolean;
@@ -20,23 +26,10 @@ type SettingsCodexSectionProps = {
     status: "idle" | "running" | "done";
     result: CodexDoctorResult | null;
   };
-  remoteHostDraft: string;
-  remoteTokenDraft: string;
-  orbitWsUrlDraft: string;
-  orbitAuthUrlDraft: string;
-  orbitRunnerNameDraft: string;
-  orbitAccessClientIdDraft: string;
-  orbitAccessClientSecretRefDraft: string;
-  orbitStatusText: string | null;
-  orbitAuthCode: string | null;
-  orbitVerificationUrl: string | null;
-  orbitBusyAction: string | null;
-  tailscaleStatus: TailscaleStatus | null;
-  tailscaleStatusBusy: boolean;
-  tailscaleStatusError: string | null;
-  tailscaleCommandPreview: TailscaleDaemonCommandPreview | null;
-  tailscaleCommandBusy: boolean;
-  tailscaleCommandError: string | null;
+  codexUpdateState: {
+    status: "idle" | "running" | "done";
+    result: CodexUpdateResult | null;
+  };
   globalAgentsMeta: string;
   globalAgentsError: string | null;
   globalAgentsContent: string;
@@ -57,13 +50,6 @@ type SettingsCodexSectionProps = {
   codexArgsOverrideDrafts: Record<string, string>;
   onSetCodexPathDraft: Dispatch<SetStateAction<string>>;
   onSetCodexArgsDraft: Dispatch<SetStateAction<string>>;
-  onSetRemoteHostDraft: Dispatch<SetStateAction<string>>;
-  onSetRemoteTokenDraft: Dispatch<SetStateAction<string>>;
-  onSetOrbitWsUrlDraft: Dispatch<SetStateAction<string>>;
-  onSetOrbitAuthUrlDraft: Dispatch<SetStateAction<string>>;
-  onSetOrbitRunnerNameDraft: Dispatch<SetStateAction<string>>;
-  onSetOrbitAccessClientIdDraft: Dispatch<SetStateAction<string>>;
-  onSetOrbitAccessClientSecretRefDraft: Dispatch<SetStateAction<string>>;
   onSetGlobalAgentsContent: (value: string) => void;
   onSetGlobalConfigContent: (value: string) => void;
   onSetCodexBinOverrideDrafts: Dispatch<SetStateAction<Record<string, string>>>;
@@ -72,23 +58,7 @@ type SettingsCodexSectionProps = {
   onBrowseCodex: () => Promise<void>;
   onSaveCodexSettings: () => Promise<void>;
   onRunDoctor: () => Promise<void>;
-  onCommitRemoteHost: () => Promise<void>;
-  onCommitRemoteToken: () => Promise<void>;
-  onChangeRemoteProvider: (provider: AppSettings["remoteBackendProvider"]) => Promise<void>;
-  onRefreshTailscaleStatus: () => void;
-  onRefreshTailscaleCommandPreview: () => void;
-  onUseSuggestedTailscaleHost: () => Promise<void>;
-  onCommitOrbitWsUrl: () => Promise<void>;
-  onCommitOrbitAuthUrl: () => Promise<void>;
-  onCommitOrbitRunnerName: () => Promise<void>;
-  onCommitOrbitAccessClientId: () => Promise<void>;
-  onCommitOrbitAccessClientSecretRef: () => Promise<void>;
-  onOrbitConnectTest: () => void;
-  onOrbitSignIn: () => void;
-  onOrbitSignOut: () => void;
-  onOrbitRunnerStart: () => void;
-  onOrbitRunnerStop: () => void;
-  onOrbitRunnerStatus: () => void;
+  onRunCodexUpdate: () => Promise<void>;
   onRefreshGlobalAgents: () => void;
   onSaveGlobalAgents: () => void;
   onRefreshGlobalConfig: () => void;
@@ -105,31 +75,64 @@ const normalizeOverrideValue = (value: string): string | null => {
   return trimmed ? trimmed : null;
 };
 
+const DEFAULT_REASONING_EFFORT = "medium";
+
+const normalizeEffortValue = (value: unknown): string | null => {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed.toLowerCase() : null;
+};
+
+function coerceSavedModelSlug(value: string | null, models: ModelOption[]): string | null {
+  const trimmed = (value ?? "").trim();
+  if (!trimmed) {
+    return null;
+  }
+  const bySlug = models.find((model) => model.model === trimmed);
+  if (bySlug) {
+    return bySlug.model;
+  }
+  const byId = models.find((model) => model.id === trimmed);
+  return byId ? byId.model : null;
+}
+
+const getReasoningSupport = (model: ModelOption | null): boolean => {
+  if (!model) {
+    return false;
+  }
+  return model.supportedReasoningEfforts.length > 0 || model.defaultReasoningEffort !== null;
+};
+
+const getReasoningOptions = (model: ModelOption | null): string[] => {
+  if (!model) {
+    return [];
+  }
+  const supported = model.supportedReasoningEfforts
+    .map((effort) => normalizeEffortValue(effort.reasoningEffort))
+    .filter((effort): effort is string => Boolean(effort));
+  if (supported.length > 0) {
+    return Array.from(new Set(supported));
+  }
+  const fallback = normalizeEffortValue(model.defaultReasoningEffort);
+  return fallback ? [fallback] : [];
+};
+
 export function SettingsCodexSection({
   appSettings,
   onUpdateAppSettings,
+  defaultModels,
+  defaultModelsLoading,
+  defaultModelsError,
+  defaultModelsConnectedWorkspaceCount,
+  onRefreshDefaultModels,
   codexPathDraft,
   codexArgsDraft,
   codexDirty,
   isSavingSettings,
   doctorState,
-  remoteHostDraft,
-  remoteTokenDraft,
-  orbitWsUrlDraft,
-  orbitAuthUrlDraft,
-  orbitRunnerNameDraft,
-  orbitAccessClientIdDraft,
-  orbitAccessClientSecretRefDraft,
-  orbitStatusText,
-  orbitAuthCode,
-  orbitVerificationUrl,
-  orbitBusyAction,
-  tailscaleStatus,
-  tailscaleStatusBusy,
-  tailscaleStatusError,
-  tailscaleCommandPreview,
-  tailscaleCommandBusy,
-  tailscaleCommandError,
+  codexUpdateState,
   globalAgentsMeta,
   globalAgentsError,
   globalAgentsContent,
@@ -150,13 +153,6 @@ export function SettingsCodexSection({
   codexArgsOverrideDrafts,
   onSetCodexPathDraft,
   onSetCodexArgsDraft,
-  onSetRemoteHostDraft,
-  onSetRemoteTokenDraft,
-  onSetOrbitWsUrlDraft,
-  onSetOrbitAuthUrlDraft,
-  onSetOrbitRunnerNameDraft,
-  onSetOrbitAccessClientIdDraft,
-  onSetOrbitAccessClientSecretRefDraft,
   onSetGlobalAgentsContent,
   onSetGlobalConfigContent,
   onSetCodexBinOverrideDrafts,
@@ -165,23 +161,7 @@ export function SettingsCodexSection({
   onBrowseCodex,
   onSaveCodexSettings,
   onRunDoctor,
-  onCommitRemoteHost,
-  onCommitRemoteToken,
-  onChangeRemoteProvider,
-  onRefreshTailscaleStatus,
-  onRefreshTailscaleCommandPreview,
-  onUseSuggestedTailscaleHost,
-  onCommitOrbitWsUrl,
-  onCommitOrbitAuthUrl,
-  onCommitOrbitRunnerName,
-  onCommitOrbitAccessClientId,
-  onCommitOrbitAccessClientSecretRef,
-  onOrbitConnectTest,
-  onOrbitSignIn,
-  onOrbitSignOut,
-  onOrbitRunnerStart,
-  onOrbitRunnerStop,
-  onOrbitRunnerStatus,
+  onRunCodexUpdate,
   onRefreshGlobalAgents,
   onSaveGlobalAgents,
   onRefreshGlobalConfig,
@@ -189,6 +169,87 @@ export function SettingsCodexSection({
   onUpdateWorkspaceCodexBin,
   onUpdateWorkspaceSettings,
 }: SettingsCodexSectionProps) {
+  const latestModelSlug = defaultModels[0]?.model ?? null;
+  const savedModelSlug = useMemo(
+    () => coerceSavedModelSlug(appSettings.lastComposerModelId, defaultModels),
+    [appSettings.lastComposerModelId, defaultModels],
+  );
+  const selectedModelSlug = savedModelSlug ?? latestModelSlug ?? "";
+  const selectedModel = useMemo(
+    () => defaultModels.find((model) => model.model === selectedModelSlug) ?? null,
+    [defaultModels, selectedModelSlug],
+  );
+  const reasoningSupported = useMemo(
+    () => getReasoningSupport(selectedModel),
+    [selectedModel],
+  );
+  const reasoningOptions = useMemo(
+    () => getReasoningOptions(selectedModel),
+    [selectedModel],
+  );
+  const savedEffort = useMemo(
+    () => normalizeEffortValue(appSettings.lastComposerReasoningEffort),
+    [appSettings.lastComposerReasoningEffort],
+  );
+  const selectedEffort = useMemo(() => {
+    if (!reasoningSupported) {
+      return "";
+    }
+    if (savedEffort && reasoningOptions.includes(savedEffort)) {
+      return savedEffort;
+    }
+    if (reasoningOptions.includes(DEFAULT_REASONING_EFFORT)) {
+      return DEFAULT_REASONING_EFFORT;
+    }
+    const fallback = normalizeEffortValue(selectedModel?.defaultReasoningEffort);
+    if (fallback && reasoningOptions.includes(fallback)) {
+      return fallback;
+    }
+    return reasoningOptions[0] ?? "";
+  }, [reasoningOptions, reasoningSupported, savedEffort, selectedModel]);
+
+  const didNormalizeDefaultsRef = useRef(false);
+  useEffect(() => {
+    if (didNormalizeDefaultsRef.current) {
+      return;
+    }
+    if (!defaultModels.length) {
+      return;
+    }
+    const savedRawModel = (appSettings.lastComposerModelId ?? "").trim();
+    const savedRawEffort = (appSettings.lastComposerReasoningEffort ?? "").trim();
+    const shouldNormalizeModel = savedRawModel.length === 0 || savedModelSlug === null;
+    const shouldNormalizeEffort =
+      reasoningSupported &&
+      (savedRawEffort.length === 0 ||
+        savedEffort === null ||
+        !reasoningOptions.includes(savedEffort));
+    if (!shouldNormalizeModel && !shouldNormalizeEffort) {
+      didNormalizeDefaultsRef.current = true;
+      return;
+    }
+
+    const next: AppSettings = {
+      ...appSettings,
+      lastComposerModelId: shouldNormalizeModel ? selectedModelSlug : appSettings.lastComposerModelId,
+      lastComposerReasoningEffort: shouldNormalizeEffort
+        ? selectedEffort
+        : appSettings.lastComposerReasoningEffort,
+    };
+    didNormalizeDefaultsRef.current = true;
+    void onUpdateAppSettings(next);
+  }, [
+    appSettings,
+    defaultModels.length,
+    onUpdateAppSettings,
+    reasoningOptions,
+    reasoningSupported,
+    savedEffort,
+    savedModelSlug,
+    selectedModelSlug,
+    selectedEffort,
+  ]);
+
   return (
     <section className="settings-section">
       <div className="settings-section-title">Codex</div>
@@ -271,6 +332,18 @@ export function SettingsCodexSection({
             <Stethoscope aria-hidden />
             {doctorState.status === "running" ? "Running..." : "Run doctor"}
           </button>
+          <button
+            type="button"
+            className="ghost settings-button-compact"
+            onClick={() => {
+              void onRunCodexUpdate();
+            }}
+            disabled={codexUpdateState.status === "running"}
+            title="Update Codex"
+          >
+            <Stethoscope aria-hidden />
+            {codexUpdateState.status === "running" ? "Updating..." : "Update"}
+          </button>
         </div>
 
         {doctorState.result && (
@@ -295,12 +368,134 @@ export function SettingsCodexSection({
             </div>
           </div>
         )}
+
+        {codexUpdateState.result && (
+          <div
+            className={`settings-doctor ${codexUpdateState.result.ok ? "ok" : "error"}`}
+          >
+            <div className="settings-doctor-title">
+              {codexUpdateState.result.ok
+                ? codexUpdateState.result.upgraded
+                  ? "Codex updated"
+                  : "Codex already up-to-date"
+                : "Codex update failed"}
+            </div>
+            <div className="settings-doctor-body">
+              <div>Method: {codexUpdateState.result.method}</div>
+              {codexUpdateState.result.package && (
+                <div>Package: {codexUpdateState.result.package}</div>
+              )}
+              <div>
+                Version:{" "}
+                {codexUpdateState.result.afterVersion ??
+                  codexUpdateState.result.beforeVersion ??
+                  "unknown"}
+              </div>
+              {codexUpdateState.result.details && <div>{codexUpdateState.result.details}</div>}
+              {codexUpdateState.result.output && (
+                <details>
+                  <summary>output</summary>
+                  <pre>{codexUpdateState.result.output}</pre>
+                </details>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
-      <div className="settings-field">
-        <label className="settings-field-label" htmlFor="default-access">
-          Default access mode
-        </label>
+      <div className="settings-divider" />
+      <div className="settings-field-label settings-field-label--section">
+        Default parameters
+      </div>
+
+      <div className="settings-toggle-row">
+        <div>
+          <label className="settings-toggle-title" htmlFor="default-model">
+            Model
+          </label>
+          <div className="settings-toggle-subtitle">
+            {defaultModelsConnectedWorkspaceCount === 0
+              ? "Connect a project to load available models."
+              : defaultModelsLoading
+                ? "Loading models…"
+                : defaultModelsError
+                  ? `Couldn’t load models: ${defaultModelsError}`
+                  : "Used when there is no thread-specific override."}
+          </div>
+        </div>
+        <div className="settings-field-row">
+          <select
+            id="default-model"
+            className="settings-select"
+            value={selectedModelSlug}
+            disabled={!defaultModels.length || defaultModelsLoading}
+            onChange={(event) =>
+              void onUpdateAppSettings({
+                ...appSettings,
+                lastComposerModelId: event.target.value,
+              })
+            }
+            aria-label="Model"
+          >
+            {defaultModels.map((model) => (
+              <option key={model.model} value={model.model}>
+                {model.displayName?.trim() || model.model}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            className="ghost"
+            onClick={onRefreshDefaultModels}
+            disabled={defaultModelsLoading || defaultModelsConnectedWorkspaceCount === 0}
+          >
+            Refresh
+          </button>
+        </div>
+      </div>
+
+      <div className="settings-toggle-row">
+        <div>
+          <label className="settings-toggle-title" htmlFor="default-effort">
+            Reasoning effort
+          </label>
+          <div className="settings-toggle-subtitle">
+            {reasoningSupported
+              ? "Available options depend on the selected model."
+              : "The selected model does not expose reasoning effort options."}
+          </div>
+        </div>
+        <select
+          id="default-effort"
+          className="settings-select"
+          value={selectedEffort}
+          onChange={(event) =>
+            void onUpdateAppSettings({
+              ...appSettings,
+              lastComposerReasoningEffort: event.target.value,
+            })
+          }
+          aria-label="Reasoning effort"
+          disabled={!reasoningSupported}
+        >
+          {!reasoningSupported && <option value="">not supported</option>}
+          {reasoningOptions.map((effort) => (
+            <option key={effort} value={effort}>
+              {effort}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="settings-toggle-row">
+        <div>
+          <label className="settings-toggle-title" htmlFor="default-access">
+            Access mode
+          </label>
+          <div className="settings-toggle-subtitle">
+            Used when there is no thread-specific override.
+          </div>
+        </div>
         <select
           id="default-access"
           className="settings-select"
@@ -340,415 +535,6 @@ export function SettingsCodexSection({
           thread.
         </div>
       </div>
-
-      <div className="settings-field">
-        <label className="settings-field-label" htmlFor="backend-mode">
-          Backend mode
-        </label>
-        <select
-          id="backend-mode"
-          className="settings-select"
-          value={appSettings.backendMode}
-          onChange={(event) =>
-            void onUpdateAppSettings({
-              ...appSettings,
-              backendMode: event.target.value as AppSettings["backendMode"],
-            })
-          }
-        >
-          <option value="local">Local (default)</option>
-          <option value="remote">Remote (daemon)</option>
-        </select>
-        <div className="settings-help">
-          Remote mode connects to a separate daemon running the backend on another machine (e.g.
-          WSL2/Linux).
-        </div>
-      </div>
-
-      {appSettings.backendMode === "remote" && (
-        <>
-          <div className="settings-field">
-            <label className="settings-field-label" htmlFor="remote-provider">
-              Remote provider
-            </label>
-            <select
-              id="remote-provider"
-              className="settings-select"
-              value={appSettings.remoteBackendProvider}
-              onChange={(event) => {
-                void onChangeRemoteProvider(
-                  event.target.value as AppSettings["remoteBackendProvider"],
-                );
-              }}
-              aria-label="Remote provider"
-            >
-              <option value="tcp">TCP (wip)</option>
-              <option value="orbit">Orbit (wip)</option>
-            </select>
-            <div className="settings-help">
-              Use TCP for host:port daemon access, or Orbit for self-hosted Cloudflare relay
-              sessions.
-            </div>
-          </div>
-
-          {appSettings.remoteBackendProvider === "tcp" && (
-            <div className="settings-field">
-              <div className="settings-field-label">Remote backend</div>
-              <div className="settings-field-row">
-                <input
-                  className="settings-input settings-input--compact"
-                  value={remoteHostDraft}
-                  placeholder="127.0.0.1:4732"
-                  onChange={(event) => onSetRemoteHostDraft(event.target.value)}
-                  onBlur={() => {
-                    void onCommitRemoteHost();
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      event.preventDefault();
-                      void onCommitRemoteHost();
-                    }
-                  }}
-                  aria-label="Remote backend host"
-                />
-                <input
-                  type="password"
-                  className="settings-input settings-input--compact"
-                  value={remoteTokenDraft}
-                  placeholder="Token (optional)"
-                  onChange={(event) => onSetRemoteTokenDraft(event.target.value)}
-                  onBlur={() => {
-                    void onCommitRemoteToken();
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      event.preventDefault();
-                      void onCommitRemoteToken();
-                    }
-                  }}
-                  aria-label="Remote backend token"
-                />
-              </div>
-              <div className="settings-help">
-                Start the daemon separately and point CodexMonitor to it (host:port + token).
-              </div>
-              <div className="settings-field">
-                <div className="settings-field-label">Tailscale helper</div>
-                <div className="settings-field-row">
-                  <button
-                    type="button"
-                    className="button settings-button-compact"
-                    onClick={onRefreshTailscaleStatus}
-                    disabled={tailscaleStatusBusy}
-                  >
-                    {tailscaleStatusBusy ? "Checking..." : "Detect Tailscale"}
-                  </button>
-                  <button
-                    type="button"
-                    className="button settings-button-compact"
-                    onClick={onRefreshTailscaleCommandPreview}
-                    disabled={tailscaleCommandBusy}
-                  >
-                    {tailscaleCommandBusy ? "Refreshing..." : "Refresh daemon command"}
-                  </button>
-                  <button
-                    type="button"
-                    className="button settings-button-compact"
-                    disabled={!tailscaleStatus?.suggestedRemoteHost}
-                    onClick={() => {
-                      void onUseSuggestedTailscaleHost();
-                    }}
-                  >
-                    Use suggested host
-                  </button>
-                </div>
-                {tailscaleStatusError && (
-                  <div className="settings-help settings-help-error">{tailscaleStatusError}</div>
-                )}
-                {tailscaleStatus && (
-                  <>
-                    <div className="settings-help">{tailscaleStatus.message}</div>
-                    <div className="settings-help">
-                      {tailscaleStatus.installed
-                        ? `Version: ${tailscaleStatus.version ?? "unknown"}`
-                        : "Install Tailscale on both desktop and iOS to continue."}
-                    </div>
-                    {tailscaleStatus.suggestedRemoteHost && (
-                      <div className="settings-help">
-                        Suggested remote host: <code>{tailscaleStatus.suggestedRemoteHost}</code>
-                      </div>
-                    )}
-                    {tailscaleStatus.tailnetName && (
-                      <div className="settings-help">
-                        Tailnet: <code>{tailscaleStatus.tailnetName}</code>
-                      </div>
-                    )}
-                  </>
-                )}
-                {tailscaleCommandError && (
-                  <div className="settings-help settings-help-error">{tailscaleCommandError}</div>
-                )}
-                {tailscaleCommandPreview && (
-                  <>
-                    <div className="settings-help">
-                      Run this command on the desktop host to start the daemon on your tailnet:
-                    </div>
-                    <pre className="settings-command-preview">
-                      <code>{tailscaleCommandPreview.command}</code>
-                    </pre>
-                    <div className="settings-help">
-                      Use the same value as <code>Remote backend token</code>.
-                    </div>
-                    {!tailscaleCommandPreview.tokenConfigured && (
-                      <div className="settings-help settings-help-error">
-                        Remote backend token is empty. Set one before exposing daemon access.
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
-            </div>
-          )}
-
-          {appSettings.remoteBackendProvider === "orbit" && (
-            <>
-              <div className="settings-field">
-                <label className="settings-field-label" htmlFor="orbit-ws-url">
-                  Orbit websocket URL
-                </label>
-                <input
-                  id="orbit-ws-url"
-                  className="settings-input settings-input--compact"
-                  value={orbitWsUrlDraft}
-                  placeholder="wss://..."
-                  onChange={(event) => onSetOrbitWsUrlDraft(event.target.value)}
-                  onBlur={() => {
-                    void onCommitOrbitWsUrl();
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      event.preventDefault();
-                      void onCommitOrbitWsUrl();
-                    }
-                  }}
-                  aria-label="Orbit websocket URL"
-                />
-              </div>
-
-              <div className="settings-field">
-                <label className="settings-field-label" htmlFor="orbit-auth-url">
-                  Orbit auth URL
-                </label>
-                <input
-                  id="orbit-auth-url"
-                  className="settings-input settings-input--compact"
-                  value={orbitAuthUrlDraft}
-                  placeholder="https://..."
-                  onChange={(event) => onSetOrbitAuthUrlDraft(event.target.value)}
-                  onBlur={() => {
-                    void onCommitOrbitAuthUrl();
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      event.preventDefault();
-                      void onCommitOrbitAuthUrl();
-                    }
-                  }}
-                  aria-label="Orbit auth URL"
-                />
-              </div>
-
-              <div className="settings-field">
-                <label className="settings-field-label" htmlFor="orbit-runner-name">
-                  Orbit runner name
-                </label>
-                <input
-                  id="orbit-runner-name"
-                  className="settings-input settings-input--compact"
-                  value={orbitRunnerNameDraft}
-                  placeholder="codex-monitor"
-                  onChange={(event) => onSetOrbitRunnerNameDraft(event.target.value)}
-                  onBlur={() => {
-                    void onCommitOrbitRunnerName();
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      event.preventDefault();
-                      void onCommitOrbitRunnerName();
-                    }
-                  }}
-                  aria-label="Orbit runner name"
-                />
-              </div>
-
-              <div className="settings-toggle-row">
-                <div>
-                  <div className="settings-toggle-title">Auto start runner</div>
-                  <div className="settings-toggle-subtitle">
-                    Start the Orbit runner automatically when remote mode activates.
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  className={`settings-toggle ${appSettings.orbitAutoStartRunner ? "on" : ""}`}
-                  onClick={() =>
-                    void onUpdateAppSettings({
-                      ...appSettings,
-                      orbitAutoStartRunner: !appSettings.orbitAutoStartRunner,
-                    })
-                  }
-                  aria-pressed={appSettings.orbitAutoStartRunner}
-                >
-                  <span className="settings-toggle-knob" />
-                </button>
-              </div>
-
-              <div className="settings-toggle-row">
-                <div>
-                  <div className="settings-toggle-title">Use Orbit Access</div>
-                  <div className="settings-toggle-subtitle">
-                    Enable OAuth client credentials for Orbit Access.
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  className={`settings-toggle ${appSettings.orbitUseAccess ? "on" : ""}`}
-                  onClick={() =>
-                    void onUpdateAppSettings({
-                      ...appSettings,
-                      orbitUseAccess: !appSettings.orbitUseAccess,
-                    })
-                  }
-                  aria-pressed={appSettings.orbitUseAccess}
-                >
-                  <span className="settings-toggle-knob" />
-                </button>
-              </div>
-
-              <div className="settings-field">
-                <label className="settings-field-label" htmlFor="orbit-access-client-id">
-                  Orbit access client ID
-                </label>
-                <input
-                  id="orbit-access-client-id"
-                  className="settings-input settings-input--compact"
-                  value={orbitAccessClientIdDraft}
-                  placeholder="client-id"
-                  disabled={!appSettings.orbitUseAccess}
-                  onChange={(event) => onSetOrbitAccessClientIdDraft(event.target.value)}
-                  onBlur={() => {
-                    void onCommitOrbitAccessClientId();
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      event.preventDefault();
-                      void onCommitOrbitAccessClientId();
-                    }
-                  }}
-                  aria-label="Orbit access client ID"
-                />
-              </div>
-
-              <div className="settings-field">
-                <label
-                  className="settings-field-label"
-                  htmlFor="orbit-access-client-secret-ref"
-                >
-                  Orbit access client secret ref
-                </label>
-                <input
-                  id="orbit-access-client-secret-ref"
-                  className="settings-input settings-input--compact"
-                  value={orbitAccessClientSecretRefDraft}
-                  placeholder="secret-ref"
-                  disabled={!appSettings.orbitUseAccess}
-                  onChange={(event) => onSetOrbitAccessClientSecretRefDraft(event.target.value)}
-                  onBlur={() => {
-                    void onCommitOrbitAccessClientSecretRef();
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      event.preventDefault();
-                      void onCommitOrbitAccessClientSecretRef();
-                    }
-                  }}
-                  aria-label="Orbit access client secret ref"
-                />
-              </div>
-
-              <div className="settings-field">
-                <div className="settings-field-label">Orbit actions</div>
-                <div className="settings-field-row">
-                  <button
-                    type="button"
-                    className="button settings-button-compact"
-                    onClick={onOrbitConnectTest}
-                    disabled={orbitBusyAction !== null}
-                  >
-                    {orbitBusyAction === "connect-test" ? "Testing..." : "Connect test"}
-                  </button>
-                  <button
-                    type="button"
-                    className="button settings-button-compact"
-                    onClick={onOrbitSignIn}
-                    disabled={orbitBusyAction !== null}
-                  >
-                    {orbitBusyAction === "sign-in" ? "Signing In..." : "Sign In"}
-                  </button>
-                  <button
-                    type="button"
-                    className="button settings-button-compact"
-                    onClick={onOrbitSignOut}
-                    disabled={orbitBusyAction !== null}
-                  >
-                    {orbitBusyAction === "sign-out" ? "Signing Out..." : "Sign Out"}
-                  </button>
-                </div>
-                <div className="settings-field-row">
-                  <button
-                    type="button"
-                    className="button settings-button-compact"
-                    onClick={onOrbitRunnerStart}
-                    disabled={orbitBusyAction !== null}
-                  >
-                    {orbitBusyAction === "runner-start" ? "Starting..." : "Start Runner"}
-                  </button>
-                  <button
-                    type="button"
-                    className="button settings-button-compact"
-                    onClick={onOrbitRunnerStop}
-                    disabled={orbitBusyAction !== null}
-                  >
-                    {orbitBusyAction === "runner-stop" ? "Stopping..." : "Stop Runner"}
-                  </button>
-                  <button
-                    type="button"
-                    className="button settings-button-compact"
-                    onClick={onOrbitRunnerStatus}
-                    disabled={orbitBusyAction !== null}
-                  >
-                    {orbitBusyAction === "runner-status" ? "Refreshing..." : "Refresh Status"}
-                  </button>
-                </div>
-                {orbitStatusText && <div className="settings-help">{orbitStatusText}</div>}
-                {orbitAuthCode && (
-                  <div className="settings-help">
-                    Auth code: <code>{orbitAuthCode}</code>
-                  </div>
-                )}
-                {orbitVerificationUrl && (
-                  <div className="settings-help">
-                    Verification URL:{" "}
-                    <a href={orbitVerificationUrl} target="_blank" rel="noreferrer">
-                      {orbitVerificationUrl}
-                    </a>
-                  </div>
-                )}
-              </div>
-            </>
-          )}
-        </>
-      )}
 
       <FileEditorCard
         title="Global AGENTS.md"

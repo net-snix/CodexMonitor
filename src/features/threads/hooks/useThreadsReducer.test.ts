@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ConversationItem, ThreadSummary } from "../../../types";
+import type { ConversationItem, ThreadSummary } from "@/types";
 import { initialState, threadReducer } from "./useThreadsReducer";
 import type { ThreadState } from "./useThreadsReducer";
 
@@ -512,6 +512,37 @@ describe("threadReducer", () => {
     expect(removed.userInputRequests).toEqual([requestB]);
   });
 
+  it("stores turn diff updates by thread id", () => {
+    const next = threadReducer(initialState, {
+      type: "setThreadTurnDiff",
+      threadId: "thread-1",
+      diff: "diff --git a/file.ts b/file.ts",
+    });
+
+    expect(next.turnDiffByThread["thread-1"]).toBe(
+      "diff --git a/file.ts b/file.ts",
+    );
+  });
+
+  it("clears turn diff state when a thread is removed", () => {
+    const base: ThreadState = {
+      ...initialState,
+      threadsByWorkspace: {
+        "ws-1": [{ id: "thread-1", name: "Agent 1", updatedAt: 1 }],
+      },
+      activeThreadIdByWorkspace: { "ws-1": "thread-1" },
+      turnDiffByThread: { "thread-1": "diff --git a/file.ts b/file.ts" },
+    };
+
+    const next = threadReducer(base, {
+      type: "removeThread",
+      workspaceId: "ws-1",
+      threadId: "thread-1",
+    });
+
+    expect(next.turnDiffByThread["thread-1"]).toBeUndefined();
+  });
+
   it("hides background threads and keeps them hidden on future syncs", () => {
     const withThread = threadReducer(initialState, {
       type: "ensureThread",
@@ -540,4 +571,27 @@ describe("threadReducer", () => {
     expect(ids).toContain("thread-visible");
     expect(ids).not.toContain("thread-bg");
   });
+  it("trims existing items when maxItemsPerThread is reduced", () => {
+    const items: ConversationItem[] = Array.from({ length: 5 }, (_, index) => ({
+      id: `msg-${index}`,
+      kind: "message",
+      role: "assistant",
+      text: `message ${index}`,
+    }));
+
+    const withItems = threadReducer(initialState, {
+      type: "setThreadItems",
+      threadId: "thread-1",
+      items,
+    });
+    expect(withItems.itemsByThread["thread-1"]).toHaveLength(5);
+
+    const trimmed = threadReducer(withItems, {
+      type: "setMaxItemsPerThread",
+      maxItemsPerThread: 3,
+    });
+    expect(trimmed.itemsByThread["thread-1"]).toHaveLength(3);
+    expect(trimmed.itemsByThread["thread-1"]?.[0]?.id).toBe("msg-2");
+  });
+
 });

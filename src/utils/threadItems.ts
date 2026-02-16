@@ -1,9 +1,15 @@
 import type { ConversationItem } from "../types";
+import { CHAT_SCROLLBACK_DEFAULT } from "./chatScrollback";
 
-const MAX_ITEMS_PER_THREAD = 200;
+export type PrepareThreadItemsOptions = {
+  maxItemsPerThread?: number | null;
+};
+
+const DEFAULT_MAX_ITEMS_PER_THREAD = CHAT_SCROLLBACK_DEFAULT;
 const MAX_ITEM_TEXT = 20000;
+const MAX_LARGE_TOOL_TEXT = 200000;
 const TOOL_OUTPUT_RECENT_ITEMS = 40;
-const NO_TRUNCATE_TOOL_TYPES = new Set(["fileChange", "commandExecution"]);
+const LARGE_TOOL_TYPES = new Set(["fileChange", "commandExecution"]);
 const READ_COMMANDS = new Set(["cat", "sed", "head", "tail", "less", "more", "nl"]);
 const LIST_COMMANDS = new Set(["ls", "tree", "find", "fd"]);
 const SEARCH_COMMANDS = new Set(["rg", "grep", "ripgrep", "findstr"]);
@@ -50,6 +56,13 @@ function truncateText(text: string, maxLength = MAX_ITEM_TEXT) {
   return `${text.slice(0, sliceLength)}...`;
 }
 
+function truncateToolText(toolType: string, text: string) {
+  const maxLength = LARGE_TOOL_TYPES.has(toolType)
+    ? MAX_LARGE_TOOL_TEXT
+    : MAX_ITEM_TEXT;
+  return truncateText(text, maxLength);
+}
+
 function normalizeStringList(value: unknown) {
   if (Array.isArray(value)) {
     return value.map((entry) => asString(entry)).filter(Boolean);
@@ -94,23 +107,19 @@ export function normalizeItem(item: ConversationItem): ConversationItem {
     return { ...item, diff: truncateText(item.diff) };
   }
   if (item.kind === "tool") {
-    const isNoTruncateTool = NO_TRUNCATE_TOOL_TYPES.has(item.toolType);
     return {
       ...item,
       title: truncateText(item.title, 200),
       detail: truncateText(item.detail, 2000),
-      output: isNoTruncateTool
-        ? item.output
-        : item.output
-          ? truncateText(item.output)
-          : item.output,
+      output: item.output
+        ? truncateToolText(item.toolType, item.output)
+        : item.output,
       changes: item.changes
         ? item.changes.map((change) => ({
             ...change,
-            diff:
-              isNoTruncateTool || !change.diff
-                ? change.diff
-                : truncateText(change.diff),
+            diff: change.diff
+              ? truncateToolText(item.toolType, change.diff)
+              : change.diff,
           }))
         : item.changes,
     };
@@ -417,7 +426,7 @@ function summarizeExploration(items: ConversationItem[]) {
   return result;
 }
 
-export function prepareThreadItems(items: ConversationItem[]) {
+export function prepareThreadItems(items: ConversationItem[], options?: PrepareThreadItemsOptions) {
   const filtered: ConversationItem[] = [];
   for (const item of items) {
     const last = filtered[filtered.length - 1];
@@ -433,10 +442,21 @@ export function prepareThreadItems(items: ConversationItem[]) {
     filtered.push(item);
   }
   const normalized = filtered.map((item) => normalizeItem(item));
+  const maxItemsPerThreadRaw = options?.maxItemsPerThread;
+  const maxItemsPerThread =
+    maxItemsPerThreadRaw === null
+      ? null
+      : typeof maxItemsPerThreadRaw === "number" &&
+          Number.isFinite(maxItemsPerThreadRaw) &&
+          maxItemsPerThreadRaw > 0
+        ? Math.floor(maxItemsPerThreadRaw)
+        : DEFAULT_MAX_ITEMS_PER_THREAD;
   const limited =
-    normalized.length > MAX_ITEMS_PER_THREAD
-      ? normalized.slice(-MAX_ITEMS_PER_THREAD)
-      : normalized;
+    maxItemsPerThread === null
+      ? normalized
+      : normalized.length > maxItemsPerThread
+        ? normalized.slice(-maxItemsPerThread)
+        : normalized;
   const summarized = summarizeExploration(limited);
   const cutoff = Math.max(0, summarized.length - TOOL_OUTPUT_RECENT_ITEMS);
   return summarized.map((item, index) => {

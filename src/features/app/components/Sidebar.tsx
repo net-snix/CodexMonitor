@@ -1,5 +1,6 @@
 import type {
   AccountSnapshot,
+  RequestUserInputRequest,
   RateLimitSnapshot,
   ThreadListSortKey,
   ThreadSummary,
@@ -61,10 +62,13 @@ type SidebarProps = {
   threadListLoadingByWorkspace: Record<string, boolean>;
   threadListPagingByWorkspace: Record<string, boolean>;
   threadListCursorByWorkspace: Record<string, string | null>;
+  pinnedThreadsVersion: number;
   threadListSortKey: ThreadListSortKey;
   onSetThreadListSortKey: (sortKey: ThreadListSortKey) => void;
+  onRefreshAllThreads: () => void;
   activeWorkspaceId: string | null;
   activeThreadId: string | null;
+  userInputRequests?: RequestUserInputRequest[];
   accountRateLimits: RateLimitSnapshot | null;
   usageShowRemaining: boolean;
   accountInfo: AccountSnapshot | null;
@@ -116,10 +120,13 @@ export const Sidebar = memo(function Sidebar({
   threadListLoadingByWorkspace,
   threadListPagingByWorkspace,
   threadListCursorByWorkspace,
+  pinnedThreadsVersion,
   threadListSortKey,
   onSetThreadListSortKey,
+  onRefreshAllThreads,
   activeWorkspaceId,
   activeThreadId,
+  userInputRequests = [],
   accountRateLimits,
   usageShowRemaining,
   accountInfo,
@@ -195,6 +202,19 @@ export const Sidebar = memo(function Sidebar({
   } = getUsageLabels(accountRateLimits, usageShowRemaining);
   const debouncedQuery = useDebouncedValue(searchQuery, 150);
   const normalizedQuery = debouncedQuery.trim().toLowerCase();
+  const pendingUserInputKeys = useMemo(
+    () =>
+      new Set(
+        userInputRequests
+          .map((request) => {
+            const workspaceId = request.workspace_id.trim();
+            const threadId = request.params.thread_id.trim();
+            return workspaceId && threadId ? `${workspaceId}:${threadId}` : "";
+          })
+          .filter(Boolean),
+      ),
+    [userInputRequests],
+  );
 
   const isWorkspaceMatch = useCallback(
     (workspace: WorkspaceInfo) => {
@@ -248,6 +268,10 @@ export const Sidebar = memo(function Sidebar({
   const showAccountSwitcher = Boolean(activeWorkspaceId);
   const accountSwitchDisabled = accountSwitching || !activeWorkspaceId;
   const accountCancelDisabled = !accountSwitching || !activeWorkspaceId;
+  const refreshDisabled = workspaces.length === 0 || workspaces.every((workspace) => !workspace.connected);
+  const refreshInProgress = workspaces.some(
+    (workspace) => threadListLoadingByWorkspace[workspace.id] ?? false,
+  );
 
   const pinnedThreadRows = useMemo(() => {
     type ThreadRow = { thread: ThreadSummary; depth: number };
@@ -270,6 +294,7 @@ export const Sidebar = memo(function Sidebar({
         true,
         workspace.id,
         getPinTimestamp,
+        pinnedThreadsVersion,
       );
       if (!pinnedRows.length) {
         return;
@@ -315,6 +340,7 @@ export const Sidebar = memo(function Sidebar({
     threadsByWorkspace,
     getThreadRows,
     getPinTimestamp,
+    pinnedThreadsVersion,
     isWorkspaceMatch,
   ]);
 
@@ -415,6 +441,9 @@ export const Sidebar = memo(function Sidebar({
         isSearchOpen={isSearchOpen}
         threadListSortKey={threadListSortKey}
         onSetThreadListSortKey={onSetThreadListSortKey}
+        onRefreshAllThreads={onRefreshAllThreads}
+        refreshDisabled={refreshDisabled || refreshInProgress}
+        refreshInProgress={refreshInProgress}
       />
       <div className={`sidebar-search${isSearchOpen ? " is-open" : ""}`}>
         {isSearchOpen && (
@@ -475,6 +504,7 @@ export const Sidebar = memo(function Sidebar({
                 activeWorkspaceId={activeWorkspaceId}
                 activeThreadId={activeThreadId}
                 threadStatusById={threadStatusById}
+                pendingUserInputKeys={pendingUserInputKeys}
                 getThreadTime={getThreadTime}
                 isThreadPinned={isThreadPinned}
                 onSelectThread={onSelectThread}
@@ -511,6 +541,7 @@ export const Sidebar = memo(function Sidebar({
                     isExpanded,
                     entry.id,
                     getPinTimestamp,
+                    pinnedThreadsVersion,
                   );
                   const nextCursor =
                     threadListCursorByWorkspace[entry.id] ?? null;
@@ -626,10 +657,12 @@ export const Sidebar = memo(function Sidebar({
                           expandedWorkspaces={expandedWorkspaces}
                           activeWorkspaceId={activeWorkspaceId}
                           activeThreadId={activeThreadId}
+                          pendingUserInputKeys={pendingUserInputKeys}
                           getThreadRows={getThreadRows}
                           getThreadTime={getThreadTime}
                           isThreadPinned={isThreadPinned}
                           getPinTimestamp={getPinTimestamp}
+                          pinnedThreadsVersion={pinnedThreadsVersion}
                           onSelectWorkspace={onSelectWorkspace}
                           onConnectWorkspace={onConnectWorkspace}
                           onToggleWorkspaceCollapse={onToggleWorkspaceCollapse}
@@ -652,6 +685,7 @@ export const Sidebar = memo(function Sidebar({
                           activeWorkspaceId={activeWorkspaceId}
                           activeThreadId={activeThreadId}
                           threadStatusById={threadStatusById}
+                          pendingUserInputKeys={pendingUserInputKeys}
                           getThreadTime={getThreadTime}
                           isThreadPinned={isThreadPinned}
                           onToggleExpanded={handleToggleExpanded}

@@ -12,6 +12,21 @@ type DiffBlockProps = {
     index: number,
     event: MouseEvent<HTMLDivElement> | KeyboardEvent<HTMLDivElement>,
   ) => void;
+  onLineMouseDown?: (
+    line: ParsedDiffLine,
+    index: number,
+    event: MouseEvent<HTMLDivElement>,
+  ) => void;
+  onLineMouseEnter?: (
+    line: ParsedDiffLine,
+    index: number,
+    event: MouseEvent<HTMLDivElement>,
+  ) => void;
+  onLineMouseUp?: (
+    line: ParsedDiffLine,
+    index: number,
+    event: MouseEvent<HTMLDivElement>,
+  ) => void;
   selectedRange?: { start: number; end: number } | null;
   parsedLines?: ParsedDiffLine[] | null;
 };
@@ -21,6 +36,9 @@ export function DiffBlock({
   language,
   showLineNumbers = true,
   onLineSelect,
+  onLineMouseDown,
+  onLineMouseEnter,
+  onLineMouseUp,
   selectedRange = null,
   parsedLines = null,
 }: DiffBlockProps) {
@@ -51,6 +69,7 @@ export function DiffBlock({
             }${isSelected ? " is-selected" : ""}${
               isRangeStart ? " is-range-start" : ""
             }${isRangeEnd ? " is-range-end" : ""}`}
+            data-has-gutter={showLineNumbers ? "true" : "false"}
             role={isSelectable ? "button" : undefined}
             tabIndex={isSelectable ? 0 : undefined}
             aria-pressed={isSelectable ? isSelected : undefined}
@@ -58,6 +77,27 @@ export function DiffBlock({
               isSelectable
                 ? (event) => {
                     onLineSelect?.(line, index, event);
+                  }
+                : undefined
+            }
+            onMouseDown={
+              isSelectable
+                ? (event) => {
+                    onLineMouseDown?.(line, index, event);
+                  }
+                : undefined
+            }
+            onMouseEnter={
+              isSelectable
+                ? (event) => {
+                    onLineMouseEnter?.(line, index, event);
+                  }
+                : undefined
+            }
+            onMouseUp={
+              isSelectable
+                ? (event) => {
+                    onLineMouseUp?.(line, index, event);
                   }
                 : undefined
             }

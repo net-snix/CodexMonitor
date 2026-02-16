@@ -36,8 +36,10 @@ const workspace: WorkspaceInfo = {
 function makeProps(overrides?: Partial<Parameters<typeof useGitPanelController>[0]>) {
   return {
     activeWorkspace: workspace,
+    activeItems: [],
     gitDiffPreloadEnabled: false,
     gitDiffIgnoreWhitespaceChanges: false,
+    splitChatDiffView: false,
     isCompact: false,
     isTablet: false,
     activeTab: "codex" as const,
@@ -141,5 +143,93 @@ describe("useGitPanelController preload behavior", () => {
 
     const selectedEnabled = getLastEnabledArg();
     expect(selectedEnabled).toBe(true);
+  });
+
+  it("loads local diffs when split view is enabled and preload is disabled", () => {
+    renderHook(() =>
+      useGitPanelController(
+        makeProps({
+          splitChatDiffView: true,
+        }),
+      ),
+    );
+
+    const enabled = getLastEnabledArg();
+    expect(enabled).toBe(true);
+  });
+
+  it("derives per-file diffs from active thread fileChange items", () => {
+    const { result } = renderHook(() =>
+      useGitPanelController(
+        makeProps({
+          activeItems: [
+            {
+              id: "change-1",
+              kind: "tool",
+              toolType: "fileChange",
+              title: "File changes",
+              detail: "",
+              changes: [
+                {
+                  path: "src/main.ts",
+                  kind: "modify",
+                  diff: "diff --git a/src/main.ts b/src/main.ts",
+                },
+              ],
+            },
+          ],
+        }),
+      ),
+    );
+
+    act(() => {
+      result.current.handleGitPanelModeChange("perFile");
+    });
+
+    expect(result.current.diffSource).toBe("perFile");
+    expect(result.current.perFileDiffGroups).toHaveLength(1);
+    expect(result.current.perFileDiffGroups[0]?.path).toBe("src/main.ts");
+    expect(result.current.perFileDiffGroups[0]?.edits[0]?.label).toBe("Edit 1");
+    expect(result.current.activeDiffs[0]?.path).toBe(
+      "src/main.ts@@item-change-1@@change-0",
+    );
+  });
+
+  it("opens per-file diff selection in center diff mode", () => {
+    const { result } = renderHook(() =>
+      useGitPanelController(
+        makeProps({
+          activeItems: [
+            {
+              id: "change-1",
+              kind: "tool",
+              toolType: "fileChange",
+              title: "File changes",
+              detail: "",
+              changes: [
+                {
+                  path: "src/main.ts",
+                  kind: "modify",
+                  diff: "diff --git a/src/main.ts b/src/main.ts",
+                },
+              ],
+            },
+          ],
+        }),
+      ),
+    );
+
+    act(() => {
+      result.current.handleSelectPerFileDiff(
+        "src/main.ts@@item-change-1@@change-0",
+      );
+    });
+
+    expect(result.current.centerMode).toBe("diff");
+    expect(result.current.gitPanelMode).toBe("perFile");
+    expect(result.current.diffSource).toBe("perFile");
+    expect(result.current.selectedDiffPath).toBe(
+      "src/main.ts@@item-change-1@@change-0",
+    );
   });
 });

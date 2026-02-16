@@ -3,18 +3,16 @@ import { open } from "@tauri-apps/plugin-dialog";
 import type { Options as NotificationOptions } from "@tauri-apps/plugin-notification";
 import type {
   AppSettings,
+  CodexUpdateResult,
   CodexDoctorResult,
   DictationModelStatus,
   DictationSessionState,
   LocalUsageSnapshot,
-  OrbitConnectTestResult,
-  OrbitDeviceCodeStart,
-  OrbitRunnerStatus,
-  OrbitSignInPollResult,
-  OrbitSignOutResult,
+  TcpDaemonStatus,
   TailscaleDaemonCommandPreview,
   TailscaleStatus,
   WorkspaceInfo,
+  AppMention,
   WorkspaceSettings,
 } from "../types";
 import type {
@@ -43,6 +41,14 @@ export async function pickWorkspacePath(): Promise<string | null> {
     return null;
   }
   return selection;
+}
+
+export async function pickWorkspacePaths(): Promise<string[]> {
+  const selection = await open({ directory: true, multiple: true });
+  if (!selection) {
+    return [];
+  }
+  return Array.isArray(selection) ? selection : [selection];
 }
 
 export async function pickImageFiles(): Promise<string[]> {
@@ -271,6 +277,7 @@ export async function sendUserMessage(
     accessMode?: "read-only" | "current" | "full-access";
     images?: string[];
     collaborationMode?: Record<string, unknown> | null;
+    appMentions?: AppMention[];
   },
 ) {
   const payload: Record<string, unknown> = {
@@ -285,6 +292,9 @@ export async function sendUserMessage(
   if (options?.collaborationMode) {
     payload.collaborationMode = options.collaborationMode;
   }
+  if (options?.appMentions && options.appMentions.length > 0) {
+    payload.appMentions = options.appMentions;
+  }
   return invoke("send_user_message", payload);
 }
 
@@ -294,6 +304,27 @@ export async function interruptTurn(
   turnId: string,
 ) {
   return invoke("turn_interrupt", { workspaceId, threadId, turnId });
+}
+
+export async function steerTurn(
+  workspaceId: string,
+  threadId: string,
+  turnId: string,
+  text: string,
+  images?: string[],
+  appMentions?: AppMention[],
+) {
+  const payload: Record<string, unknown> = {
+    workspaceId,
+    threadId,
+    turnId,
+    text,
+    images: images ?? null,
+  };
+  if (appMentions && appMentions.length > 0) {
+    payload.appMentions = appMentions;
+  }
+  return invoke("turn_steer", payload);
 }
 
 export async function startReview(
@@ -349,6 +380,43 @@ export async function getGitStatus(workspace_id: string): Promise<{
   totalDeletions: number;
 }> {
   return invoke("get_git_status", { workspaceId: workspace_id });
+}
+
+export type InitGitRepoResponse =
+  | { status: "initialized"; commitError?: string }
+  | { status: "already_initialized" }
+  | { status: "needs_confirmation"; entryCount: number };
+
+export async function initGitRepo(
+  workspaceId: string,
+  branch: string,
+  force = false,
+): Promise<InitGitRepoResponse> {
+  return invoke<InitGitRepoResponse>("init_git_repo", { workspaceId, branch, force });
+}
+
+export type CreateGitHubRepoResponse =
+  | { status: "ok"; repo: string; remoteUrl?: string | null }
+  | {
+      status: "partial";
+      repo: string;
+      remoteUrl?: string | null;
+      pushError?: string | null;
+      defaultBranchError?: string | null;
+    };
+
+export async function createGitHubRepo(
+  workspaceId: string,
+  repo: string,
+  visibility: "private" | "public",
+  branch?: string | null,
+): Promise<CreateGitHubRepoResponse> {
+  return invoke<CreateGitHubRepoResponse>("create_github_repo", {
+    workspaceId,
+    repo,
+    visibility,
+    branch,
+  });
 }
 
 export async function listGitRoots(
@@ -457,6 +525,16 @@ export async function getGitHubPullRequestComments(
   });
 }
 
+export async function checkoutGitHubPullRequest(
+  workspace_id: string,
+  prNumber: number,
+): Promise<void> {
+  return invoke("checkout_github_pull_request", {
+    workspaceId: workspace_id,
+    prNumber,
+  });
+}
+
 export async function localUsageSnapshot(
   days?: number,
   workspacePath?: string | null,
@@ -470,6 +548,21 @@ export async function localUsageSnapshot(
 
 export async function getModelList(workspaceId: string) {
   return invoke<any>("model_list", { workspaceId });
+}
+
+export async function getExperimentalFeatureList(
+  workspaceId: string,
+  cursor?: string | null,
+  limit?: number | null,
+) {
+  return invoke<any>("experimental_feature_list", { workspaceId, cursor, limit });
+}
+
+export async function setCodexFeatureFlag(
+  featureKey: string,
+  enabled: boolean,
+): Promise<void> {
+  return invoke("set_codex_feature_flag", { featureKey, enabled });
 }
 
 export async function generateRunMetadata(workspaceId: string, prompt: string) {
@@ -512,8 +605,9 @@ export async function getAppsList(
   workspaceId: string,
   cursor?: string | null,
   limit?: number | null,
+  threadId?: string | null,
 ) {
-  return invoke<any>("apps_list", { workspaceId, cursor, limit });
+  return invoke<any>("apps_list", { workspaceId, cursor, limit, threadId });
 }
 
 export async function getPromptsList(workspaceId: string) {
@@ -587,36 +681,12 @@ export async function getAppSettings(): Promise<AppSettings> {
   return invoke<AppSettings>("get_app_settings");
 }
 
+export async function isMobileRuntime(): Promise<boolean> {
+  return invoke<boolean>("is_mobile_runtime");
+}
+
 export async function updateAppSettings(settings: AppSettings): Promise<AppSettings> {
   return invoke<AppSettings>("update_app_settings", { settings });
-}
-
-export async function orbitConnectTest(): Promise<OrbitConnectTestResult> {
-  return invoke<OrbitConnectTestResult>("orbit_connect_test");
-}
-
-export async function orbitSignInStart(): Promise<OrbitDeviceCodeStart> {
-  return invoke<OrbitDeviceCodeStart>("orbit_sign_in_start");
-}
-
-export async function orbitSignInPoll(deviceCode: string): Promise<OrbitSignInPollResult> {
-  return invoke<OrbitSignInPollResult>("orbit_sign_in_poll", { deviceCode });
-}
-
-export async function orbitSignOut(): Promise<OrbitSignOutResult> {
-  return invoke<OrbitSignOutResult>("orbit_sign_out");
-}
-
-export async function orbitRunnerStart(): Promise<OrbitRunnerStatus> {
-  return invoke<OrbitRunnerStatus>("orbit_runner_start");
-}
-
-export async function orbitRunnerStop(): Promise<OrbitRunnerStatus> {
-  return invoke<OrbitRunnerStatus>("orbit_runner_stop");
-}
-
-export async function orbitRunnerStatus(): Promise<OrbitRunnerStatus> {
-  return invoke<OrbitRunnerStatus>("orbit_runner_status");
 }
 
 export async function tailscaleStatus(): Promise<TailscaleStatus> {
@@ -625,6 +695,18 @@ export async function tailscaleStatus(): Promise<TailscaleStatus> {
 
 export async function tailscaleDaemonCommandPreview(): Promise<TailscaleDaemonCommandPreview> {
   return invoke<TailscaleDaemonCommandPreview>("tailscale_daemon_command_preview");
+}
+
+export async function tailscaleDaemonStart(): Promise<TcpDaemonStatus> {
+  return invoke<TcpDaemonStatus>("tailscale_daemon_start");
+}
+
+export async function tailscaleDaemonStop(): Promise<TcpDaemonStatus> {
+  return invoke<TcpDaemonStatus>("tailscale_daemon_stop");
+}
+
+export async function tailscaleDaemonStatus(): Promise<TcpDaemonStatus> {
+  return invoke<TcpDaemonStatus>("tailscale_daemon_status");
 }
 
 type MenuAcceleratorUpdate = {
@@ -643,6 +725,13 @@ export async function runCodexDoctor(
   codexArgs: string | null,
 ): Promise<CodexDoctorResult> {
   return invoke<CodexDoctorResult>("codex_doctor", { codexBin, codexArgs });
+}
+
+export async function runCodexUpdate(
+  codexBin: string | null,
+  codexArgs: string | null,
+): Promise<CodexUpdateResult> {
+  return invoke<CodexUpdateResult>("codex_update", { codexBin, codexArgs });
 }
 
 export async function getWorkspaceFiles(workspaceId: string) {
@@ -791,6 +880,14 @@ export async function resumeThread(workspaceId: string, threadId: string) {
   return invoke<any>("resume_thread", { workspaceId, threadId });
 }
 
+export async function threadLiveSubscribe(workspaceId: string, threadId: string) {
+  return invoke<any>("thread_live_subscribe", { workspaceId, threadId });
+}
+
+export async function threadLiveUnsubscribe(workspaceId: string, threadId: string) {
+  return invoke<any>("thread_live_unsubscribe", { workspaceId, threadId });
+}
+
 export async function archiveThread(workspaceId: string, threadId: string) {
   return invoke<any>("archive_thread", { workspaceId, threadId });
 }
@@ -801,12 +898,6 @@ export async function setThreadName(
   name: string,
 ) {
   return invoke<any>("set_thread_name", { workspaceId, threadId, name });
-}
-
-export async function getCommitMessagePrompt(
-  workspaceId: string,
-): Promise<string> {
-  return invoke("get_commit_message_prompt", { workspaceId });
 }
 
 export async function generateCommitMessage(

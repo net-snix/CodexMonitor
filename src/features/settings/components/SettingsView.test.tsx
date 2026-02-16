@@ -10,13 +10,32 @@ import {
 } from "@testing-library/react";
 import type { ComponentProps } from "react";
 import { describe, expect, it, vi } from "vitest";
-import type { AppSettings, WorkspaceInfo } from "../../../types";
+import type { AppSettings, WorkspaceInfo } from "@/types";
+import { getExperimentalFeatureList, getModelList, listWorkspaces } from "@services/tauri";
+import { DEFAULT_COMMIT_MESSAGE_PROMPT } from "@utils/commitMessagePrompt";
 import { SettingsView } from "./SettingsView";
 
 vi.mock("@tauri-apps/plugin-dialog", () => ({
   ask: vi.fn(),
   open: vi.fn(),
 }));
+
+vi.mock("@services/tauri", async () => {
+  const actual = await vi.importActual<typeof import("@services/tauri")>(
+    "@services/tauri",
+  );
+  return {
+    ...actual,
+    getModelList: vi.fn(),
+    getExperimentalFeatureList: vi.fn(),
+    listWorkspaces: vi.fn(),
+  };
+});
+
+const getModelListMock = vi.mocked(getModelList);
+const getExperimentalFeatureListMock = vi.mocked(getExperimentalFeatureList);
+const listWorkspacesMock = vi.mocked(listWorkspaces);
+listWorkspacesMock.mockResolvedValue([]);
 
 const baseSettings: AppSettings = {
   codexBin: null,
@@ -25,13 +44,17 @@ const baseSettings: AppSettings = {
   remoteBackendProvider: "tcp",
   remoteBackendHost: "127.0.0.1:4732",
   remoteBackendToken: null,
-  orbitWsUrl: null,
-  orbitAuthUrl: null,
-  orbitRunnerName: null,
-  orbitAutoStartRunner: false,
-  orbitUseAccess: false,
-  orbitAccessClientId: null,
-  orbitAccessClientSecretRef: null,
+  remoteBackends: [
+    {
+      id: "remote-default",
+      name: "Primary remote",
+      provider: "tcp",
+      host: "127.0.0.1:4732",
+      token: null,
+    },
+  ],
+  activeRemoteBackendId: "remote-default",
+  keepDaemonRunningAfterAppClose: false,
   defaultAccessMode: "current",
   reviewDeliveryMode: "inline",
   composerModelShortcut: null,
@@ -58,6 +81,8 @@ const baseSettings: AppSettings = {
   theme: "system",
   usageShowRemaining: false,
   showMessageFilePath: true,
+  chatHistoryScrollbackItems: 200,
+  threadTitleAutogenerationEnabled: false,
   uiFontFamily:
     'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
   codeFontFamily:
@@ -65,11 +90,15 @@ const baseSettings: AppSettings = {
   codeFontSize: 11,
   notificationSoundsEnabled: true,
   systemNotificationsEnabled: true,
+  subagentSystemNotificationsEnabled: true,
+  splitChatDiffView: false,
   preloadGitDiffs: true,
   gitDiffIgnoreWhitespaceChanges: false,
+  commitMessagePrompt: DEFAULT_COMMIT_MESSAGE_PROMPT,
   experimentalCollabEnabled: false,
   collaborationModesEnabled: true,
   steerEnabled: true,
+  pauseQueuedMessagesWhenResponseRequired: true,
   unifiedExecEnabled: true,
   experimentalAppsEnabled: false,
   personality: "friendly",
@@ -110,6 +139,17 @@ const createDoctorResult = () => ({
   nodeOk: true,
   nodeVersion: null,
   nodeDetails: null,
+});
+
+const createUpdateResult = () => ({
+  ok: true,
+  method: "brew_formula" as const,
+  package: "codex",
+  beforeVersion: "codex 0.0.0",
+  afterVersion: "codex 0.0.1",
+  upgraded: true,
+  output: null,
+  details: null,
 });
 
 const renderDisplaySection = (
@@ -164,11 +204,38 @@ const renderFeaturesSection = (
   options: {
     appSettings?: Partial<AppSettings>;
     onUpdateAppSettings?: ComponentProps<typeof SettingsView>["onUpdateAppSettings"];
+    experimentalFeaturesResponse?: unknown;
   } = {},
 ) => {
   cleanup();
   const onUpdateAppSettings =
     options.onUpdateAppSettings ?? vi.fn().mockResolvedValue(undefined);
+  getExperimentalFeatureListMock.mockResolvedValue(
+    (options.experimentalFeaturesResponse as Record<string, unknown>) ?? {
+      data: [
+        {
+          name: "steer",
+          stage: "stable",
+          enabled: true,
+          defaultEnabled: true,
+          displayName: "Steer mode",
+          description:
+            "Send messages immediately. Use Tab to queue while a run is active.",
+          announcement: null,
+        },
+        {
+          name: "unified_exec",
+          stage: "stable",
+          enabled: true,
+          defaultEnabled: true,
+          displayName: "Background terminal",
+          description: "Run long-running terminal commands in the background.",
+          announcement: null,
+        },
+      ],
+      nextCursor: null,
+    },
+  );
   const props: ComponentProps<typeof SettingsView> = {
     reduceTransparency: false,
     onToggleTransparency: vi.fn(),
@@ -176,7 +243,13 @@ const renderFeaturesSection = (
     openAppIconById: {},
     onUpdateAppSettings,
     workspaceGroups: [],
-    groupedWorkspaces: [],
+    groupedWorkspaces: [
+      {
+        id: null,
+        name: "Ungrouped",
+        workspaces: [workspace({ id: "w-features", name: "Features Workspace", connected: true })],
+      },
+    ],
     ungroupedLabel: "Ungrouped",
     onClose: vi.fn(),
     onMoveWorkspace: vi.fn(),
@@ -367,6 +440,29 @@ describe("SettingsView Display", () => {
     });
   });
 
+  it("toggles split chat and diff center panes", async () => {
+    const onUpdateAppSettings = vi.fn().mockResolvedValue(undefined);
+    renderDisplaySection({ onUpdateAppSettings });
+
+    const row = screen
+      .getByText("Split chat and diff center panes")
+      .closest(".settings-toggle-row") as HTMLElement | null;
+    if (!row) {
+      throw new Error("Expected split center panes row");
+    }
+    const toggle = row.querySelector("button.settings-toggle") as HTMLButtonElement | null;
+    if (!toggle) {
+      throw new Error("Expected split center panes toggle");
+    }
+    fireEvent.click(toggle);
+
+    await waitFor(() => {
+      expect(onUpdateAppSettings).toHaveBeenCalledWith(
+        expect.objectContaining({ splitChatDiffView: true }),
+      );
+    });
+  });
+
   it("toggles reduce transparency", async () => {
     const onToggleTransparency = vi.fn();
     renderDisplaySection({ onToggleTransparency, reduceTransparency: false });
@@ -499,6 +595,28 @@ describe("SettingsView Display", () => {
       );
     });
   });
+
+  it("toggles sub-agent system notifications", async () => {
+    const onUpdateAppSettings = vi.fn().mockResolvedValue(undefined);
+    renderDisplaySection({
+      onUpdateAppSettings,
+      appSettings: { subagentSystemNotificationsEnabled: false },
+    });
+
+    const row = screen
+      .getByText("Sub-agent notifications")
+      .closest(".settings-toggle-row") as HTMLElement | null;
+    if (!row) {
+      throw new Error("Expected sub-agent notifications row");
+    }
+    fireEvent.click(within(row).getByRole("button"));
+
+    await waitFor(() => {
+      expect(onUpdateAppSettings).toHaveBeenCalledWith(
+        expect.objectContaining({ subagentSystemNotificationsEnabled: true }),
+      );
+    });
+  });
 });
 
 describe("SettingsView Environments", () => {
@@ -600,6 +718,7 @@ describe("SettingsView Codex overrides", () => {
         openAppIconById={{}}
         onUpdateAppSettings={vi.fn().mockResolvedValue(undefined)}
         onRunDoctor={vi.fn().mockResolvedValue(createDoctorResult())}
+        onRunCodexUpdate={vi.fn().mockResolvedValue(createUpdateResult())}
         onUpdateWorkspaceCodexBin={vi.fn().mockResolvedValue(undefined)}
         onUpdateWorkspaceSettings={onUpdateWorkspaceSettings}
         scaleShortcutTitle="Scale shortcut"
@@ -647,6 +766,7 @@ describe("SettingsView Codex overrides", () => {
         openAppIconById={{}}
         onUpdateAppSettings={onUpdateAppSettings}
         onRunDoctor={vi.fn().mockResolvedValue(createDoctorResult())}
+        onRunCodexUpdate={vi.fn().mockResolvedValue(createUpdateResult())}
         onUpdateWorkspaceCodexBin={vi.fn().mockResolvedValue(undefined)}
         onUpdateWorkspaceSettings={vi.fn().mockResolvedValue(undefined)}
         scaleShortcutTitle="Scale shortcut"
@@ -672,7 +792,7 @@ describe("SettingsView Codex overrides", () => {
     });
   });
 
-  it("renders Orbit controls in remote mode for Orbit provider", async () => {
+  it("renders mobile daemon controls in local backend mode for TCP provider", async () => {
     cleanup();
     render(
       <SettingsView
@@ -691,8 +811,8 @@ describe("SettingsView Codex overrides", () => {
         onToggleTransparency={vi.fn()}
         appSettings={{
           ...baseSettings,
-          backendMode: "remote",
-          remoteBackendProvider: "orbit",
+          backendMode: "local",
+          remoteBackendProvider: "tcp",
         }}
         openAppIconById={{}}
         onUpdateAppSettings={vi.fn().mockResolvedValue(undefined)}
@@ -707,220 +827,379 @@ describe("SettingsView Codex overrides", () => {
         onDownloadDictationModel={vi.fn()}
         onCancelDictationDownload={vi.fn()}
         onRemoveDictationModel={vi.fn()}
-        initialSection="codex"
+        initialSection="server"
       />,
     );
 
     await waitFor(() => {
-      expect(screen.getByLabelText("Orbit websocket URL")).toBeTruthy();
-      expect(screen.getByLabelText("Orbit auth URL")).toBeTruthy();
-      expect(screen.getByLabelText("Orbit runner name")).toBeTruthy();
-      expect(screen.getByLabelText("Orbit access client ID")).toBeTruthy();
-      expect(screen.getByLabelText("Orbit access client secret ref")).toBeTruthy();
-      expect(screen.getByRole("button", { name: "Connect test" })).toBeTruthy();
-      expect(screen.getByRole("button", { name: "Sign In" })).toBeTruthy();
-      expect(screen.getByRole("button", { name: "Sign Out" })).toBeTruthy();
-      expect(screen.getByRole("button", { name: "Start Runner" })).toBeTruthy();
-      expect(screen.getByRole("button", { name: "Stop Runner" })).toBeTruthy();
-      expect(screen.getByRole("button", { name: "Refresh Status" })).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Start daemon" })).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Stop daemon" })).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Refresh status" })).toBeTruthy();
+      expect(screen.getByLabelText("Remote backend host")).toBeTruthy();
+      expect(screen.getByLabelText("Remote backend token")).toBeTruthy();
     });
   });
 
-  it("polls Orbit sign-in using deviceCode until authorized", async () => {
+  it("shows mobile-only server controls on iOS runtime", async () => {
     cleanup();
-    const onUpdateAppSettings = vi.fn().mockResolvedValue(undefined);
-    const startSpy = vi.fn().mockResolvedValueOnce({
-      deviceCode: "device-code-123",
-      userCode: "ABCD-1234",
-      verificationUri: "https://orbit.example/verify",
-      verificationUriComplete: null,
-      intervalSeconds: 1,
-      expiresInSeconds: 30,
+    const originalPlatformDescriptor = Object.getOwnPropertyDescriptor(
+      window.navigator,
+      "platform",
+    );
+    const originalUserAgentDescriptor = Object.getOwnPropertyDescriptor(
+      window.navigator,
+      "userAgent",
+    );
+    const originalTouchPointsDescriptor = Object.getOwnPropertyDescriptor(
+      window.navigator,
+      "maxTouchPoints",
+    );
+
+    Object.defineProperty(window.navigator, "platform", {
+      configurable: true,
+      value: "iPhone",
     });
-    const pollSpy = vi
-      .fn()
-      .mockResolvedValueOnce({
-        status: "pending",
-        token: null,
-        message: "Waiting for authorization.",
-        intervalSeconds: 1,
-      })
-      .mockResolvedValueOnce({
-        status: "authorized",
-        token: "orbit-token-1",
-        message: "Orbit sign in complete.",
-        intervalSeconds: null,
+    Object.defineProperty(window.navigator, "userAgent", {
+      configurable: true,
+      value:
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148",
+    });
+    Object.defineProperty(window.navigator, "maxTouchPoints", {
+      configurable: true,
+      value: 5,
+    });
+
+    try {
+      render(
+        <SettingsView
+          workspaceGroups={[]}
+          groupedWorkspaces={[]}
+          ungroupedLabel="Ungrouped"
+          onClose={vi.fn()}
+          onMoveWorkspace={vi.fn()}
+          onDeleteWorkspace={vi.fn()}
+          onCreateWorkspaceGroup={vi.fn().mockResolvedValue(null)}
+          onRenameWorkspaceGroup={vi.fn().mockResolvedValue(null)}
+          onMoveWorkspaceGroup={vi.fn().mockResolvedValue(null)}
+          onDeleteWorkspaceGroup={vi.fn().mockResolvedValue(null)}
+          onAssignWorkspaceGroup={vi.fn().mockResolvedValue(null)}
+          reduceTransparency={false}
+          onToggleTransparency={vi.fn()}
+          appSettings={{
+            ...baseSettings,
+            backendMode: "local",
+            remoteBackendProvider: "tcp",
+          }}
+          openAppIconById={{}}
+          onUpdateAppSettings={vi.fn().mockResolvedValue(undefined)}
+          onRunDoctor={vi.fn().mockResolvedValue(createDoctorResult())}
+          onUpdateWorkspaceCodexBin={vi.fn().mockResolvedValue(undefined)}
+          onUpdateWorkspaceSettings={vi.fn().mockResolvedValue(undefined)}
+          scaleShortcutTitle="Scale shortcut"
+          scaleShortcutText="Use Command +/-"
+          onTestNotificationSound={vi.fn()}
+          onTestSystemNotification={vi.fn()}
+          dictationModelStatus={null}
+          onDownloadDictationModel={vi.fn()}
+          onCancelDictationDownload={vi.fn()}
+          onRemoveDictationModel={vi.fn()}
+          initialSection="server"
+        />,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByLabelText("Remote backend host")).toBeTruthy();
+        expect(screen.getByLabelText("Remote backend token")).toBeTruthy();
+        expect(screen.getByRole("button", { name: "Connect & test" })).toBeTruthy();
       });
-    const orbitServiceClient: NonNullable<
-      ComponentProps<typeof SettingsView>["orbitServiceClient"]
-    > = {
-      orbitConnectTest: vi.fn().mockResolvedValue({
-        ok: true,
-        latencyMs: 12,
-        message: "Connected to Orbit relay.",
-      }),
-      orbitSignInStart: startSpy,
-      orbitSignInPoll: pollSpy,
-      orbitSignOut: vi.fn().mockResolvedValue({ success: true, message: null }),
-      orbitRunnerStart: vi.fn().mockResolvedValue({
-        state: "running",
-        pid: 123,
-        startedAtMs: Date.now(),
-        lastError: null,
-        orbitUrl: "wss://orbit.example/ws",
-      }),
-      orbitRunnerStop: vi.fn().mockResolvedValue({
-        state: "stopped",
-        pid: null,
-        startedAtMs: null,
-        lastError: null,
-        orbitUrl: "wss://orbit.example/ws",
-      }),
-      orbitRunnerStatus: vi.fn().mockResolvedValue({
-        state: "stopped",
-        pid: null,
-        startedAtMs: null,
-        lastError: null,
-        orbitUrl: "wss://orbit.example/ws",
-      }),
-    };
-    const rendered = render(
-      <SettingsView
-        workspaceGroups={[]}
-        groupedWorkspaces={[]}
-        ungroupedLabel="Ungrouped"
-        onClose={vi.fn()}
-        onMoveWorkspace={vi.fn()}
-        onDeleteWorkspace={vi.fn()}
-        onCreateWorkspaceGroup={vi.fn().mockResolvedValue(null)}
-        onRenameWorkspaceGroup={vi.fn().mockResolvedValue(null)}
-        onMoveWorkspaceGroup={vi.fn().mockResolvedValue(null)}
-        onDeleteWorkspaceGroup={vi.fn().mockResolvedValue(null)}
-        onAssignWorkspaceGroup={vi.fn().mockResolvedValue(null)}
-        reduceTransparency={false}
-        onToggleTransparency={vi.fn()}
-        appSettings={{
-          ...baseSettings,
-          backendMode: "remote",
-          remoteBackendProvider: "orbit",
-        }}
-        openAppIconById={{}}
-        onUpdateAppSettings={onUpdateAppSettings}
-        onRunDoctor={vi.fn().mockResolvedValue(createDoctorResult())}
-        onUpdateWorkspaceCodexBin={vi.fn().mockResolvedValue(undefined)}
-        onUpdateWorkspaceSettings={vi.fn().mockResolvedValue(undefined)}
-        scaleShortcutTitle="Scale shortcut"
-        scaleShortcutText="Use Command +/-"
-        onTestNotificationSound={vi.fn()}
-        onTestSystemNotification={vi.fn()}
-        dictationModelStatus={null}
-        onDownloadDictationModel={vi.fn()}
-        onCancelDictationDownload={vi.fn()}
-        onRemoveDictationModel={vi.fn()}
-        initialSection="codex"
-        orbitServiceClient={orbitServiceClient}
-      />,
-    );
 
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Sign In" }));
-    });
-    await waitFor(() => {
-      expect(pollSpy).toHaveBeenCalledTimes(1);
-    }, { timeout: 2500 });
-
-    rendered.rerender(
-      <SettingsView
-        workspaceGroups={[]}
-        groupedWorkspaces={[]}
-        ungroupedLabel="Ungrouped"
-        onClose={vi.fn()}
-        onMoveWorkspace={vi.fn()}
-        onDeleteWorkspace={vi.fn()}
-        onCreateWorkspaceGroup={vi.fn().mockResolvedValue(null)}
-        onRenameWorkspaceGroup={vi.fn().mockResolvedValue(null)}
-        onMoveWorkspaceGroup={vi.fn().mockResolvedValue(null)}
-        onDeleteWorkspaceGroup={vi.fn().mockResolvedValue(null)}
-        onAssignWorkspaceGroup={vi.fn().mockResolvedValue(null)}
-        reduceTransparency={false}
-        onToggleTransparency={vi.fn()}
-        appSettings={{
-          ...baseSettings,
-          backendMode: "remote",
-          remoteBackendProvider: "orbit",
-          theme: "dark",
-        }}
-        openAppIconById={{}}
-        onUpdateAppSettings={onUpdateAppSettings}
-        onRunDoctor={vi.fn().mockResolvedValue(createDoctorResult())}
-        onUpdateWorkspaceCodexBin={vi.fn().mockResolvedValue(undefined)}
-        onUpdateWorkspaceSettings={vi.fn().mockResolvedValue(undefined)}
-        scaleShortcutTitle="Scale shortcut"
-        scaleShortcutText="Use Command +/-"
-        onTestNotificationSound={vi.fn()}
-        onTestSystemNotification={vi.fn()}
-        dictationModelStatus={null}
-        onDownloadDictationModel={vi.fn()}
-        onCancelDictationDownload={vi.fn()}
-        onRemoveDictationModel={vi.fn()}
-        initialSection="codex"
-        orbitServiceClient={orbitServiceClient}
-      />,
-    );
-
-    await waitFor(() => {
-      expect(startSpy).toHaveBeenCalledTimes(1);
-      expect(pollSpy).toHaveBeenCalledTimes(2);
-      expect(pollSpy).toHaveBeenCalledWith("device-code-123");
-      expect(onUpdateAppSettings).toHaveBeenCalledWith(
-        expect.objectContaining({ remoteBackendToken: "orbit-token-1", theme: "dark" }),
-      );
-      expect(screen.getByText(/Auth code:/).textContent ?? "").toContain("ABCD-1234");
-      expect(screen.getByText("Orbit sign in complete.")).toBeTruthy();
-    }, { timeout: 3500 });
+      expect(screen.queryByLabelText("Backend mode")).toBeNull();
+      expect(screen.queryByRole("button", { name: "Start daemon" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Detect Tailscale" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Start Runner" })).toBeNull();
+      expect(
+        screen.getByText(/get the tailscale hostname and token from your desktop/i),
+      ).toBeTruthy();
+    } finally {
+      if (originalPlatformDescriptor) {
+        Object.defineProperty(window.navigator, "platform", originalPlatformDescriptor);
+      } else {
+        Reflect.deleteProperty(window.navigator, "platform");
+      }
+      if (originalUserAgentDescriptor) {
+        Object.defineProperty(window.navigator, "userAgent", originalUserAgentDescriptor);
+      } else {
+        Reflect.deleteProperty(window.navigator, "userAgent");
+      }
+      if (originalTouchPointsDescriptor) {
+        Object.defineProperty(
+          window.navigator,
+          "maxTouchPoints",
+          originalTouchPointsDescriptor,
+        );
+      } else {
+        Reflect.deleteProperty(window.navigator, "maxTouchPoints");
+      }
+    }
   });
 
-  it("syncs token state after Orbit sign-out", async () => {
+  it("supports multiple saved remotes on iOS runtime", async () => {
     cleanup();
     const onUpdateAppSettings = vi.fn().mockResolvedValue(undefined);
-    const orbitServiceClient: NonNullable<
-      ComponentProps<typeof SettingsView>["orbitServiceClient"]
-    > = {
-      orbitConnectTest: vi.fn().mockResolvedValue({
-        ok: true,
-        latencyMs: 12,
-        message: "Connected to Orbit relay.",
-      }),
-      orbitSignInStart: vi.fn(),
-      orbitSignInPoll: vi.fn(),
-      orbitSignOut: vi.fn().mockResolvedValue({ success: true, message: null }),
-      orbitRunnerStart: vi.fn().mockResolvedValue({
-        state: "running",
-        pid: 123,
-        startedAtMs: Date.now(),
-        lastError: null,
-        orbitUrl: "wss://orbit.example/ws",
-      }),
-      orbitRunnerStop: vi.fn().mockResolvedValue({
-        state: "stopped",
-        pid: null,
-        startedAtMs: null,
-        lastError: null,
-        orbitUrl: "wss://orbit.example/ws",
-      }),
-      orbitRunnerStatus: vi.fn().mockResolvedValue({
-        state: "stopped",
-        pid: null,
-        startedAtMs: null,
-        lastError: null,
-        orbitUrl: "wss://orbit.example/ws",
-      }),
-    };
+    const originalPlatformDescriptor = Object.getOwnPropertyDescriptor(
+      window.navigator,
+      "platform",
+    );
+    const originalUserAgentDescriptor = Object.getOwnPropertyDescriptor(
+      window.navigator,
+      "userAgent",
+    );
+    const originalTouchPointsDescriptor = Object.getOwnPropertyDescriptor(
+      window.navigator,
+      "maxTouchPoints",
+    );
+
+    Object.defineProperty(window.navigator, "platform", {
+      configurable: true,
+      value: "iPhone",
+    });
+    Object.defineProperty(window.navigator, "userAgent", {
+      configurable: true,
+      value:
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148",
+    });
+    Object.defineProperty(window.navigator, "maxTouchPoints", {
+      configurable: true,
+      value: 5,
+    });
+
+    try {
+      render(
+        <SettingsView
+          workspaceGroups={[]}
+          groupedWorkspaces={[]}
+          ungroupedLabel="Ungrouped"
+          onClose={vi.fn()}
+          onMoveWorkspace={vi.fn()}
+          onDeleteWorkspace={vi.fn()}
+          onCreateWorkspaceGroup={vi.fn().mockResolvedValue(null)}
+          onRenameWorkspaceGroup={vi.fn().mockResolvedValue(null)}
+          onMoveWorkspaceGroup={vi.fn().mockResolvedValue(null)}
+          onDeleteWorkspaceGroup={vi.fn().mockResolvedValue(null)}
+          onAssignWorkspaceGroup={vi.fn().mockResolvedValue(null)}
+          reduceTransparency={false}
+          onToggleTransparency={vi.fn()}
+          appSettings={{
+            ...baseSettings,
+            remoteBackendProvider: "tcp",
+            remoteBackendHost: "127.0.0.1:4732",
+            remoteBackendToken: "token-a",
+            remoteBackends: [
+              {
+                id: "remote-a",
+                name: "Home Mac",
+                provider: "tcp",
+                host: "127.0.0.1:4732",
+                token: "token-a",
+              },
+              {
+                id: "remote-b",
+                name: "Office Mac",
+                provider: "tcp",
+                host: "office-mac.tailnet.ts.net:4732",
+                token: "token-b",
+              },
+            ],
+            activeRemoteBackendId: "remote-a",
+          }}
+          openAppIconById={{}}
+          onUpdateAppSettings={onUpdateAppSettings}
+          onRunDoctor={vi.fn().mockResolvedValue(createDoctorResult())}
+          onUpdateWorkspaceCodexBin={vi.fn().mockResolvedValue(undefined)}
+          onUpdateWorkspaceSettings={vi.fn().mockResolvedValue(undefined)}
+          scaleShortcutTitle="Scale shortcut"
+          scaleShortcutText="Use Command +/-"
+          onTestNotificationSound={vi.fn()}
+          onTestSystemNotification={vi.fn()}
+          dictationModelStatus={null}
+          onDownloadDictationModel={vi.fn()}
+          onCancelDictationDownload={vi.fn()}
+          onRemoveDictationModel={vi.fn()}
+          initialSection="server"
+        />,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByRole("list", { name: "Saved remotes" })).toBeTruthy();
+        expect(screen.getByLabelText("Remote name")).toBeTruthy();
+      });
+      expect(screen.getAllByText(/Last connected: Never/i).length).toBeGreaterThan(0);
+
+      fireEvent.click(screen.getByRole("button", { name: "Use Office Mac remote" }));
+
+      await waitFor(() => {
+        expect(onUpdateAppSettings).toHaveBeenCalledWith(
+          expect.objectContaining({
+            activeRemoteBackendId: "remote-b",
+            remoteBackendProvider: "tcp",
+            remoteBackendHost: "office-mac.tailnet.ts.net:4732",
+            remoteBackendToken: "token-b",
+          }),
+        );
+      });
+
+      onUpdateAppSettings.mockClear();
+      fireEvent.change(screen.getByLabelText("Remote name"), {
+        target: { value: "Home Mac" },
+      });
+      fireEvent.blur(screen.getByLabelText("Remote name"));
+
+      await waitFor(() => {
+        expect(
+          screen.getAllByText('A remote named "Home Mac" already exists.').length,
+        ).toBeGreaterThan(0);
+      });
+
+      onUpdateAppSettings.mockClear();
+      fireEvent.click(screen.getByRole("button", { name: "Add remote" }));
+      expect(screen.getByRole("dialog", { name: "Add remote" })).toBeTruthy();
+      expect(onUpdateAppSettings).toHaveBeenCalledTimes(0);
+
+      fireEvent.click(screen.getByRole("button", { name: "Close add remote modal" }));
+      expect(screen.queryByRole("dialog", { name: "Add remote" })).toBeNull();
+
+      fireEvent.click(screen.getByRole("button", { name: "Add remote" }));
+      fireEvent.change(screen.getByLabelText("New remote name"), {
+        target: { value: "Travel Mac" },
+      });
+      fireEvent.change(screen.getByLabelText("New remote host"), {
+        target: { value: "travel-mac.tailnet.ts.net:4732" },
+      });
+      fireEvent.change(screen.getByLabelText("New remote token"), {
+        target: { value: "token-travel" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Connect & add" }));
+
+      await waitFor(() => {
+        expect(onUpdateAppSettings).toHaveBeenCalledTimes(2);
+      });
+      const trialSettings = onUpdateAppSettings.mock.calls[0]?.[0] as AppSettings;
+      const connectedSettings = onUpdateAppSettings.mock.calls[1]?.[0] as AppSettings;
+      expect(trialSettings.remoteBackends).toHaveLength(3);
+      expect(trialSettings.activeRemoteBackendId).toBeTruthy();
+      expect(trialSettings.remoteBackendHost).toBe("travel-mac.tailnet.ts.net:4732");
+      expect(trialSettings.remoteBackendToken).toBe("token-travel");
+      expect(connectedSettings.remoteBackends).toHaveLength(3);
+      const connectedEntry = connectedSettings.remoteBackends.find(
+        (entry) => entry.id === connectedSettings.activeRemoteBackendId,
+      );
+      expect(connectedEntry?.lastConnectedAtMs).toEqual(expect.any(Number));
+      expect(screen.queryByRole("dialog", { name: "Add remote" })).toBeNull();
+      expect(listWorkspacesMock).toHaveBeenCalled();
+
+      onUpdateAppSettings.mockClear();
+      fireEvent.click(screen.getByRole("button", { name: "Add remote" }));
+      fireEvent.change(screen.getByLabelText("New remote token"), {
+        target: { value: "" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Connect & add" }));
+
+      await waitFor(() => {
+        expect(screen.getByText("Remote backend token is required.")).toBeTruthy();
+      });
+
+      onUpdateAppSettings.mockClear();
+      fireEvent.click(screen.getByRole("button", { name: "Move Home Mac down" }));
+
+      await waitFor(() => {
+        expect(onUpdateAppSettings).toHaveBeenCalledTimes(1);
+        const nextSettings = onUpdateAppSettings.mock.calls[0]?.[0] as AppSettings;
+        expect(nextSettings.remoteBackends[0]?.id).toBe("remote-b");
+      });
+
+      onUpdateAppSettings.mockClear();
+      fireEvent.click(screen.getByRole("button", { name: "Delete Office Mac" }));
+      fireEvent.click(screen.getByRole("button", { name: "Delete remote" }));
+
+      await waitFor(() => {
+        expect(onUpdateAppSettings).toHaveBeenCalledTimes(1);
+        const nextSettings = onUpdateAppSettings.mock.calls[0]?.[0] as AppSettings;
+        expect(nextSettings.remoteBackends.length).toBeGreaterThanOrEqual(1);
+      });
+    } finally {
+      if (originalPlatformDescriptor) {
+        Object.defineProperty(window.navigator, "platform", originalPlatformDescriptor);
+      } else {
+        Reflect.deleteProperty(window.navigator, "platform");
+      }
+      if (originalUserAgentDescriptor) {
+        Object.defineProperty(window.navigator, "userAgent", originalUserAgentDescriptor);
+      } else {
+        Reflect.deleteProperty(window.navigator, "userAgent");
+      }
+      if (originalTouchPointsDescriptor) {
+        Object.defineProperty(
+          window.navigator,
+          "maxTouchPoints",
+          originalTouchPointsDescriptor,
+        );
+      } else {
+        Reflect.deleteProperty(window.navigator, "maxTouchPoints");
+      }
+    }
+  });
+
+});
+
+describe("SettingsView Codex defaults", () => {
+  const createModelListResponse = (models: Array<Record<string, unknown>>) => ({
+    result: { data: models },
+  });
+
+  it("uses the latest model and medium effort by default (no Default option)", async () => {
+    cleanup();
+    const onUpdateAppSettings = vi.fn().mockResolvedValue(undefined);
+    getModelListMock.mockResolvedValue(
+      createModelListResponse([
+        {
+          id: "gpt-4.1",
+          model: "gpt-4.1",
+          displayName: "GPT-4.1",
+          description: "",
+          supportedReasoningEfforts: [
+            { reasoningEffort: "low", description: "" },
+            { reasoningEffort: "medium", description: "" },
+            { reasoningEffort: "high", description: "" },
+          ],
+          defaultReasoningEffort: "medium",
+          isDefault: false,
+        },
+        {
+          id: "gpt-5.1",
+          model: "gpt-5.1",
+          displayName: "GPT-5.1",
+          description: "",
+          supportedReasoningEfforts: [
+            { reasoningEffort: "low", description: "" },
+            { reasoningEffort: "medium", description: "" },
+            { reasoningEffort: "high", description: "" },
+          ],
+          defaultReasoningEffort: "medium",
+          isDefault: false,
+        },
+      ]),
+    );
 
     render(
       <SettingsView
         workspaceGroups={[]}
-        groupedWorkspaces={[]}
+        groupedWorkspaces={[
+          {
+            id: null,
+            name: "Ungrouped",
+            workspaces: [workspace({ id: "w1", name: "Workspace", connected: true })],
+          },
+        ]}
         ungroupedLabel="Ungrouped"
         onClose={vi.fn()}
         onMoveWorkspace={vi.fn()}
@@ -932,15 +1211,11 @@ describe("SettingsView Codex overrides", () => {
         onAssignWorkspaceGroup={vi.fn().mockResolvedValue(null)}
         reduceTransparency={false}
         onToggleTransparency={vi.fn()}
-        appSettings={{
-          ...baseSettings,
-          backendMode: "remote",
-          remoteBackendProvider: "orbit",
-          remoteBackendToken: "token-to-clear",
-        }}
+        appSettings={baseSettings}
         openAppIconById={{}}
         onUpdateAppSettings={onUpdateAppSettings}
         onRunDoctor={vi.fn().mockResolvedValue(createDoctorResult())}
+        onRunCodexUpdate={vi.fn().mockResolvedValue(createUpdateResult())}
         onUpdateWorkspaceCodexBin={vi.fn().mockResolvedValue(undefined)}
         onUpdateWorkspaceSettings={vi.fn().mockResolvedValue(undefined)}
         scaleShortcutTitle="Scale shortcut"
@@ -952,65 +1227,77 @@ describe("SettingsView Codex overrides", () => {
         onCancelDictationDownload={vi.fn()}
         onRemoveDictationModel={vi.fn()}
         initialSection="codex"
-        orbitServiceClient={orbitServiceClient}
       />,
     );
 
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Sign Out" }));
+    const modelSelect = screen.getByLabelText("Model") as HTMLSelectElement;
+    const effortSelect = screen.getByLabelText(
+      "Reasoning effort",
+    ) as HTMLSelectElement;
+
+    await waitFor(() => {
+      expect(getModelListMock).toHaveBeenCalledWith("w1");
+      expect(modelSelect.value).toBe("gpt-5.1");
     });
+
+    expect(within(modelSelect).queryByRole("option", { name: /default/i })).toBeNull();
+    expect(within(effortSelect).queryByRole("option", { name: /default/i })).toBeNull();
+    expect(effortSelect.value).toBe("medium");
 
     await waitFor(() => {
       expect(onUpdateAppSettings).toHaveBeenCalledWith(
-        expect.objectContaining({ remoteBackendToken: null }),
+        expect.objectContaining({
+          lastComposerModelId: "gpt-5.1",
+          lastComposerReasoningEffort: "medium",
+        }),
       );
     });
   });
 
-  it("retries Orbit token persistence after a failed save", async () => {
+  it("updates model and effort when the user changes the selects", async () => {
     cleanup();
-    const onUpdateAppSettings = vi
-      .fn()
-      .mockRejectedValueOnce(new Error("settings write failed"))
-      .mockResolvedValue(undefined);
-    const orbitServiceClient: NonNullable<
-      ComponentProps<typeof SettingsView>["orbitServiceClient"]
-    > = {
-      orbitConnectTest: vi.fn().mockResolvedValue({
-        ok: true,
-        latencyMs: 12,
-        message: "Connected to Orbit relay.",
-      }),
-      orbitSignInStart: vi.fn(),
-      orbitSignInPoll: vi.fn(),
-      orbitSignOut: vi.fn().mockResolvedValue({ success: true, message: null }),
-      orbitRunnerStart: vi.fn().mockResolvedValue({
-        state: "running",
-        pid: 123,
-        startedAtMs: Date.now(),
-        lastError: null,
-        orbitUrl: "wss://orbit.example/ws",
-      }),
-      orbitRunnerStop: vi.fn().mockResolvedValue({
-        state: "stopped",
-        pid: null,
-        startedAtMs: null,
-        lastError: null,
-        orbitUrl: "wss://orbit.example/ws",
-      }),
-      orbitRunnerStatus: vi.fn().mockResolvedValue({
-        state: "stopped",
-        pid: null,
-        startedAtMs: null,
-        lastError: null,
-        orbitUrl: "wss://orbit.example/ws",
-      }),
-    };
+    const onUpdateAppSettings = vi.fn().mockResolvedValue(undefined);
+    getModelListMock.mockResolvedValue(
+      createModelListResponse([
+        {
+          id: "gpt-4.1",
+          model: "gpt-4.1",
+          displayName: "GPT-4.1",
+          description: "",
+          supportedReasoningEfforts: [
+            { reasoningEffort: "low", description: "" },
+            { reasoningEffort: "medium", description: "" },
+            { reasoningEffort: "high", description: "" },
+          ],
+          defaultReasoningEffort: "medium",
+          isDefault: false,
+        },
+        {
+          id: "gpt-5.1",
+          model: "gpt-5.1",
+          displayName: "GPT-5.1",
+          description: "",
+          supportedReasoningEfforts: [
+            { reasoningEffort: "low", description: "" },
+            { reasoningEffort: "medium", description: "" },
+            { reasoningEffort: "high", description: "" },
+          ],
+          defaultReasoningEffort: "medium",
+          isDefault: false,
+        },
+      ]),
+    );
 
     render(
       <SettingsView
         workspaceGroups={[]}
-        groupedWorkspaces={[]}
+        groupedWorkspaces={[
+          {
+            id: null,
+            name: "Ungrouped",
+            workspaces: [workspace({ id: "w1", name: "Workspace", connected: true })],
+          },
+        ]}
         ungroupedLabel="Ungrouped"
         onClose={vi.fn()}
         onMoveWorkspace={vi.fn()}
@@ -1022,15 +1309,11 @@ describe("SettingsView Codex overrides", () => {
         onAssignWorkspaceGroup={vi.fn().mockResolvedValue(null)}
         reduceTransparency={false}
         onToggleTransparency={vi.fn()}
-        appSettings={{
-          ...baseSettings,
-          backendMode: "remote",
-          remoteBackendProvider: "orbit",
-          remoteBackendToken: "token-to-clear",
-        }}
+        appSettings={baseSettings}
         openAppIconById={{}}
         onUpdateAppSettings={onUpdateAppSettings}
         onRunDoctor={vi.fn().mockResolvedValue(createDoctorResult())}
+        onRunCodexUpdate={vi.fn().mockResolvedValue(createUpdateResult())}
         onUpdateWorkspaceCodexBin={vi.fn().mockResolvedValue(undefined)}
         onUpdateWorkspaceSettings={vi.fn().mockResolvedValue(undefined)}
         scaleShortcutTitle="Scale shortcut"
@@ -1042,27 +1325,37 @@ describe("SettingsView Codex overrides", () => {
         onCancelDictationDownload={vi.fn()}
         onRemoveDictationModel={vi.fn()}
         initialSection="codex"
-        orbitServiceClient={orbitServiceClient}
       />,
     );
 
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Sign Out" }));
-    });
+    const modelSelect = screen.getByLabelText("Model") as HTMLSelectElement;
+    const effortSelect = screen.getByLabelText(
+      "Reasoning effort",
+    ) as HTMLSelectElement;
 
     await waitFor(() => {
-      expect(onUpdateAppSettings).toHaveBeenCalledTimes(1);
-      expect(screen.getByText("Sign Out failed: settings write failed")).toBeTruthy();
+      expect(modelSelect.disabled).toBe(false);
+      expect(modelSelect.value).toBe("gpt-5.1");
+      expect(onUpdateAppSettings).toHaveBeenCalledWith(
+        expect.objectContaining({ lastComposerModelId: "gpt-5.1" }),
+      );
     });
 
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Sign Out" }));
-    });
+    onUpdateAppSettings.mockClear();
+    fireEvent.change(modelSelect, { target: { value: "gpt-4.1" } });
 
     await waitFor(() => {
-      expect(onUpdateAppSettings).toHaveBeenCalledTimes(2);
-      expect(onUpdateAppSettings).toHaveBeenLastCalledWith(
-        expect.objectContaining({ remoteBackendToken: null }),
+      expect(onUpdateAppSettings).toHaveBeenCalledWith(
+        expect.objectContaining({ lastComposerModelId: "gpt-4.1" }),
+      );
+    });
+
+    onUpdateAppSettings.mockClear();
+    fireEvent.change(effortSelect, { target: { value: "high" } });
+
+    await waitFor(() => {
+      expect(onUpdateAppSettings).toHaveBeenCalledWith(
+        expect.objectContaining({ lastComposerReasoningEffort: "high" }),
       );
     });
   });
@@ -1091,7 +1384,7 @@ describe("SettingsView Features", () => {
       appSettings: { steerEnabled: true },
     });
 
-    const steerTitle = screen.getByText("Steer mode");
+    const steerTitle = await screen.findByText("Steer mode");
     const steerRow = steerTitle.closest(".settings-toggle-row");
     expect(steerRow).not.toBeNull();
 
@@ -1112,7 +1405,7 @@ describe("SettingsView Features", () => {
       appSettings: { unifiedExecEnabled: true },
     });
 
-    const terminalTitle = screen.getByText("Background terminal");
+    const terminalTitle = await screen.findByText("Background terminal");
     const terminalRow = terminalTitle.closest(".settings-toggle-row");
     expect(terminalRow).not.toBeNull();
 
@@ -1124,6 +1417,176 @@ describe("SettingsView Features", () => {
         expect.objectContaining({ unifiedExecEnabled: false }),
       );
     });
+  });
+
+  it("shows fallback description when Codex omits feature description", async () => {
+    renderFeaturesSection({
+      experimentalFeaturesResponse: {
+        data: [
+          {
+            name: "responses_websockets",
+            stage: "underDevelopment",
+            enabled: false,
+            defaultEnabled: false,
+            displayName: null,
+            description: null,
+            announcement: null,
+          },
+        ],
+        nextCursor: null,
+      },
+    });
+
+    await screen.findByText(
+      "Use Responses API WebSocket transport for OpenAI by default.",
+    );
+  });
+});
+
+describe("SettingsView mobile layout", () => {
+  it("uses a master/detail flow on narrow mobile widths", async () => {
+    cleanup();
+    const originalMatchMedia = window.matchMedia;
+    const originalPlatformDescriptor = Object.getOwnPropertyDescriptor(
+      window.navigator,
+      "platform",
+    );
+    const originalUserAgentDescriptor = Object.getOwnPropertyDescriptor(
+      window.navigator,
+      "userAgent",
+    );
+    const originalTouchPointsDescriptor = Object.getOwnPropertyDescriptor(
+      window.navigator,
+      "maxTouchPoints",
+    );
+
+    Object.defineProperty(window, "matchMedia", {
+      configurable: true,
+      writable: true,
+      value: vi.fn().mockImplementation((query: string) => ({
+        matches: query.includes("max-width: 720px"),
+        media: query,
+        onchange: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    });
+    Object.defineProperty(window.navigator, "platform", {
+      configurable: true,
+      value: "iPhone",
+    });
+    Object.defineProperty(window.navigator, "userAgent", {
+      configurable: true,
+      value:
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148",
+    });
+    Object.defineProperty(window.navigator, "maxTouchPoints", {
+      configurable: true,
+      value: 5,
+    });
+
+    try {
+      const rendered = render(
+        <SettingsView
+          workspaceGroups={[]}
+          groupedWorkspaces={[]}
+          ungroupedLabel="Ungrouped"
+          onClose={vi.fn()}
+          onMoveWorkspace={vi.fn()}
+          onDeleteWorkspace={vi.fn()}
+          onCreateWorkspaceGroup={vi.fn().mockResolvedValue(null)}
+          onRenameWorkspaceGroup={vi.fn().mockResolvedValue(null)}
+          onMoveWorkspaceGroup={vi.fn().mockResolvedValue(null)}
+          onDeleteWorkspaceGroup={vi.fn().mockResolvedValue(null)}
+          onAssignWorkspaceGroup={vi.fn().mockResolvedValue(null)}
+          reduceTransparency={false}
+          onToggleTransparency={vi.fn()}
+          appSettings={baseSettings}
+          openAppIconById={{}}
+          onUpdateAppSettings={vi.fn().mockResolvedValue(undefined)}
+          onRunDoctor={vi.fn().mockResolvedValue(createDoctorResult())}
+          onUpdateWorkspaceCodexBin={vi.fn().mockResolvedValue(undefined)}
+          onUpdateWorkspaceSettings={vi.fn().mockResolvedValue(undefined)}
+          scaleShortcutTitle="Scale shortcut"
+          scaleShortcutText="Use Command +/-"
+          onTestNotificationSound={vi.fn()}
+          onTestSystemNotification={vi.fn()}
+          dictationModelStatus={null}
+          onDownloadDictationModel={vi.fn()}
+          onCancelDictationDownload={vi.fn()}
+          onRemoveDictationModel={vi.fn()}
+        />,
+      );
+
+      expect(
+        within(rendered.container).queryByText("Sections"),
+      ).toBeNull();
+      expect(
+        rendered.container.querySelectorAll(".ds-panel-nav-item-disclosure")
+          .length,
+      ).toBeGreaterThan(0);
+
+      fireEvent.click(
+        within(rendered.container).getByRole("button", {
+          name: "Display & Sound",
+        }),
+      );
+
+      await waitFor(() => {
+        expect(
+          within(rendered.container).getByRole("button", {
+            name: "Back to settings sections",
+          }),
+        ).toBeTruthy();
+        expect(
+          within(rendered.container).getByText("Display & Sound", {
+            selector: ".settings-mobile-detail-title",
+          }),
+        ).toBeTruthy();
+      });
+
+      fireEvent.click(
+        within(rendered.container).getByRole("button", {
+          name: "Back to settings sections",
+        }),
+      );
+
+      await waitFor(() => {
+        expect(within(rendered.container).queryByText("Sections")).toBeNull();
+      });
+    } finally {
+      if (originalMatchMedia) {
+        Object.defineProperty(window, "matchMedia", {
+          configurable: true,
+          writable: true,
+          value: originalMatchMedia,
+        });
+      } else {
+        Reflect.deleteProperty(window, "matchMedia");
+      }
+      if (originalPlatformDescriptor) {
+        Object.defineProperty(window.navigator, "platform", originalPlatformDescriptor);
+      } else {
+        Reflect.deleteProperty(window.navigator, "platform");
+      }
+      if (originalUserAgentDescriptor) {
+        Object.defineProperty(window.navigator, "userAgent", originalUserAgentDescriptor);
+      } else {
+        Reflect.deleteProperty(window.navigator, "userAgent");
+      }
+      if (originalTouchPointsDescriptor) {
+        Object.defineProperty(
+          window.navigator,
+          "maxTouchPoints",
+          originalTouchPointsDescriptor,
+        );
+      } else {
+        Reflect.deleteProperty(window.navigator, "maxTouchPoints");
+      }
+    }
   });
 });
 
@@ -1261,6 +1724,84 @@ describe("SettingsView Shortcuts", () => {
     });
     await waitFor(() => {
       expect(onClose).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("filters shortcuts by search query", async () => {
+    render(
+      <SettingsView
+        workspaceGroups={[]}
+        groupedWorkspaces={[]}
+        ungroupedLabel="Ungrouped"
+        onClose={vi.fn()}
+        onMoveWorkspace={vi.fn()}
+        onDeleteWorkspace={vi.fn()}
+        onCreateWorkspaceGroup={vi.fn().mockResolvedValue(null)}
+        onRenameWorkspaceGroup={vi.fn().mockResolvedValue(null)}
+        onMoveWorkspaceGroup={vi.fn().mockResolvedValue(null)}
+        onDeleteWorkspaceGroup={vi.fn().mockResolvedValue(null)}
+        onAssignWorkspaceGroup={vi.fn().mockResolvedValue(null)}
+        reduceTransparency={false}
+        onToggleTransparency={vi.fn()}
+        appSettings={baseSettings}
+        openAppIconById={{}}
+        onUpdateAppSettings={vi.fn().mockResolvedValue(undefined)}
+        onRunDoctor={vi.fn().mockResolvedValue(createDoctorResult())}
+        onUpdateWorkspaceCodexBin={vi.fn().mockResolvedValue(undefined)}
+        onUpdateWorkspaceSettings={vi.fn().mockResolvedValue(undefined)}
+        scaleShortcutTitle="Scale shortcut"
+        scaleShortcutText="Use Command +/-"
+        onTestNotificationSound={vi.fn()}
+        onTestSystemNotification={vi.fn()}
+        dictationModelStatus={null}
+        onDownloadDictationModel={vi.fn()}
+        onCancelDictationDownload={vi.fn()}
+        onRemoveDictationModel={vi.fn()}
+        initialSection="shortcuts"
+      />,
+    );
+
+    const searchInput = screen.getByLabelText("Search shortcuts");
+    expect(screen.getByText("Toggle terminal panel")).toBeTruthy();
+    expect(screen.getByText("Cycle model")).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.change(searchInput, { target: { value: "navigation" } });
+    });
+    await waitFor(() => {
+      expect(screen.getByText("Next workspace")).toBeTruthy();
+      expect(screen.queryByText("Toggle terminal panel")).toBeNull();
+    });
+
+    await act(async () => {
+      fireEvent.change(searchInput, { target: { value: "sidebars" } });
+    });
+    await waitFor(() => {
+      expect(screen.getByText("Toggle projects sidebar")).toBeTruthy();
+      expect(screen.queryByText("Next workspace")).toBeNull();
+    });
+
+    await act(async () => {
+      fireEvent.change(searchInput, { target: { value: "new shortcut while focused" } });
+    });
+    await waitFor(() => {
+      expect(screen.getByText("Cycle model")).toBeTruthy();
+      expect(screen.queryByText("Toggle terminal panel")).toBeNull();
+    });
+
+    await act(async () => {
+      fireEvent.change(searchInput, { target: { value: "no-such-shortcut" } });
+    });
+    await waitFor(() => {
+      expect(screen.getByText('No shortcuts match "no-such-shortcut".')).toBeTruthy();
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Clear" }));
+    });
+    await waitFor(() => {
+      expect(screen.getByText("Toggle terminal panel")).toBeTruthy();
+      expect(screen.queryByText('No shortcuts match "no-such-shortcut".')).toBeNull();
     });
   });
 });

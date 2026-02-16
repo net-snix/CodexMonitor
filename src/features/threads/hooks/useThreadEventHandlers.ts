@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from "react";
 import type { Dispatch, MutableRefObject } from "react";
-import type { AppServerEvent, DebugEntry, TurnPlan } from "../../../types";
-import { getAppServerRawMethod } from "../../../utils/appServerEvents";
+import type { AppServerEvent, DebugEntry, TurnPlan } from "@/types";
+import { getAppServerRawMethod } from "@utils/appServerEvents";
 import { useThreadApprovalEvents } from "./useThreadApprovalEvents";
 import { useThreadItemEvents } from "./useThreadItemEvents";
 import { useThreadTurnEvents } from "./useThreadTurnEvents";
@@ -17,16 +17,23 @@ type ThreadEventHandlersOptions = {
   markProcessing: (threadId: string, isProcessing: boolean) => void;
   markReviewing: (threadId: string, isReviewing: boolean) => void;
   setActiveTurnId: (threadId: string, turnId: string | null) => void;
+  getActiveTurnId: (threadId: string) => string | null;
   safeMessageActivity: () => void;
   recordThreadActivity: (
     workspaceId: string,
     threadId: string,
     timestamp?: number,
   ) => void;
+  onUserMessageCreated?: (
+    workspaceId: string,
+    threadId: string,
+    text: string,
+  ) => void | Promise<void>;
   pushThreadErrorMessage: (threadId: string, message: string) => void;
   onDebug?: (entry: DebugEntry) => void;
   onWorkspaceConnected: (workspaceId: string) => void;
   applyCollabThreadLinks: (
+    workspaceId: string,
     threadId: string,
     item: Record<string, unknown>,
   ) => void;
@@ -44,8 +51,10 @@ export function useThreadEventHandlers({
   markProcessing,
   markReviewing,
   setActiveTurnId,
+  getActiveTurnId,
   safeMessageActivity,
   recordThreadActivity,
+  onUserMessageCreated,
   pushThreadErrorMessage,
   onDebug,
   onWorkspaceConnected,
@@ -81,6 +90,7 @@ export function useThreadEventHandlers({
     safeMessageActivity,
     recordThreadActivity,
     applyCollabThreadLinks,
+    onUserMessageCreated,
     onReviewExited,
   });
 
@@ -90,6 +100,7 @@ export function useThreadEventHandlers({
     onTurnStarted,
     onTurnCompleted,
     onTurnPlanUpdated,
+    onTurnDiffUpdated,
     onThreadTokenUsageUpdated,
     onAccountRateLimitsUpdated,
     onTurnError,
@@ -101,6 +112,7 @@ export function useThreadEventHandlers({
     markProcessing,
     markReviewing,
     setActiveTurnId,
+    getActiveTurnId,
     pendingInterruptsRef,
     pushThreadErrorMessage,
     safeMessageActivity,
@@ -155,6 +167,7 @@ export function useThreadEventHandlers({
       onTurnStarted,
       onTurnCompleted,
       onTurnPlanUpdated,
+      onTurnDiffUpdated,
       onThreadTokenUsageUpdated,
       onAccountRateLimitsUpdated,
       onTurnError,
@@ -181,6 +194,7 @@ export function useThreadEventHandlers({
       onTurnStarted,
       onTurnCompleted,
       onTurnPlanUpdated,
+      onTurnDiffUpdated,
       onThreadTokenUsageUpdated,
       onAccountRateLimitsUpdated,
       onTurnError,

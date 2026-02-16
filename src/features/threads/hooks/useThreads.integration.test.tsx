@@ -1,33 +1,38 @@
 // @vitest-environment jsdom
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { WorkspaceInfo } from "../../../types";
-import type { useAppServerEvents } from "../../app/hooks/useAppServerEvents";
-import { useThreadRows } from "../../app/hooks/useThreadRows";
+import type { WorkspaceInfo } from "@/types";
+import type { useAppServerEvents } from "@app/hooks/useAppServerEvents";
+import { useThreadRows } from "@app/hooks/useThreadRows";
 import {
   interruptTurn,
   listThreads,
   resumeThread,
+  sendUserMessage as sendUserMessageService,
   setThreadName,
   startReview,
-} from "../../../services/tauri";
+  steerTurn,
+} from "@services/tauri";
+import { STORAGE_KEY_DETACHED_REVIEW_LINKS } from "@threads/utils/threadStorage";
+import { useQueuedSend } from "./useQueuedSend";
 import { useThreads } from "./useThreads";
 
 type AppServerHandlers = Parameters<typeof useAppServerEvents>[0];
 
 let handlers: AppServerHandlers | null = null;
 
-vi.mock("../../app/hooks/useAppServerEvents", () => ({
+vi.mock("@app/hooks/useAppServerEvents", () => ({
   useAppServerEvents: (incoming: AppServerHandlers) => {
     handlers = incoming;
   },
 }));
 
-vi.mock("../../../services/tauri", () => ({
+vi.mock("@services/tauri", () => ({
   respondToServerRequest: vi.fn(),
   respondToUserInputRequest: vi.fn(),
   rememberApprovalRule: vi.fn(),
   sendUserMessage: vi.fn(),
+  steerTurn: vi.fn(),
   startReview: vi.fn(),
   startThread: vi.fn(),
   listThreads: vi.fn(),
@@ -128,6 +133,75 @@ describe("useThreads UX integration", () => {
     }
   });
 
+  it("defers trimming until scrollback settings hydrate", async () => {
+    const totalItems = 240;
+    const items = Array.from({ length: totalItems }, (_, index) =>
+      index % 2 === 0
+        ? {
+            type: "userMessage",
+            id: `server-user-${index}`,
+            content: [{ type: "text", text: `User ${index}` }],
+          }
+        : {
+            type: "agentMessage",
+            id: `server-assistant-${index}`,
+            text: `Assistant ${index}`,
+          },
+    );
+
+    vi.mocked(resumeThread).mockResolvedValue({
+      result: {
+        thread: {
+          id: "thread-scrollback",
+          preview: "Remote preview",
+          updated_at: 9999,
+          turns: [
+            {
+              items,
+            },
+          ],
+        },
+      },
+    });
+
+    const { result, rerender } = renderHook(
+      ({ scrollbackItems }) =>
+        useThreads({
+          activeWorkspace: workspace,
+          onWorkspaceConnected: vi.fn(),
+          chatHistoryScrollbackItems: scrollbackItems,
+        }),
+      {
+        initialProps: {
+          scrollbackItems: null as number | null,
+        },
+      },
+    );
+
+    expect(handlers).not.toBeNull();
+
+    act(() => {
+      result.current.setActiveThreadId("thread-scrollback");
+    });
+
+    await waitFor(() => {
+      expect(vi.mocked(resumeThread)).toHaveBeenCalledWith(
+        "ws-1",
+        "thread-scrollback",
+      );
+    });
+
+    await waitFor(() => {
+      expect(result.current.activeItems).toHaveLength(totalItems);
+    });
+
+    rerender({ scrollbackItems: 200 });
+
+    await waitFor(() => {
+      expect(result.current.activeItems).toHaveLength(200);
+    });
+  });
+
   it("keeps the latest plan visible when a new turn starts", () => {
     const { result } = renderHook(() =>
       useThreads({
@@ -158,6 +232,27 @@ describe("useThreads UX integration", () => {
       explanation: "Plan note",
       steps: [{ step: "Do it", status: "inProgress" }],
     });
+  });
+
+  it("stores turn diff updates from app-server events", () => {
+    const { result } = renderHook(() =>
+      useThreads({
+        activeWorkspace: workspace,
+        onWorkspaceConnected: vi.fn(),
+      }),
+    );
+
+    act(() => {
+      handlers?.onTurnDiffUpdated?.(
+        "ws-1",
+        "thread-1",
+        "diff --git a/src/a.ts b/src/a.ts",
+      );
+    });
+
+    expect(result.current.turnDiffByThread["thread-1"]).toBe(
+      "diff --git a/src/a.ts b/src/a.ts",
+    );
   });
 
   it("keeps local items when resume response does not overlap", async () => {
@@ -423,6 +518,186 @@ describe("useThreads UX integration", () => {
     expect(interruptMock).toHaveBeenCalledTimes(2);
   });
 
+  it("keeps queued sends blocked while request user input is pending", async () => {
+    vi.mocked(sendUserMessageService)
+      .mockResolvedValueOnce({
+        result: { turn: { id: "turn-1" } },
+      } as Awaited<ReturnType<typeof sendUserMessageService>>)
+      .mockResolvedValueOnce({
+        result: { turn: { id: "turn-2" } },
+      } as Awaited<ReturnType<typeof sendUserMessageService>>);
+    const connectWorkspace = vi.fn().mockResolvedValue(undefined);
+    const clearActiveImages = vi.fn();
+
+    const { result } = renderHook(() => {
+      const threads = useThreads({
+        activeWorkspace: workspace,
+        onWorkspaceConnected: vi.fn(),
+      });
+      const threadId = threads.activeThreadId;
+      const status = threadId ? threads.threadStatusById[threadId] : undefined;
+      const queued = useQueuedSend({
+        activeThreadId: threadId,
+        activeTurnId: threadId ? threads.activeTurnIdByThread[threadId] ?? null : null,
+        isProcessing: status?.isProcessing ?? false,
+        isReviewing: status?.isReviewing ?? false,
+        steerEnabled: false,
+        appsEnabled: true,
+        activeWorkspace: workspace,
+        connectWorkspace,
+        startThreadForWorkspace: threads.startThreadForWorkspace,
+        sendUserMessage: threads.sendUserMessage,
+        sendUserMessageToThread: threads.sendUserMessageToThread,
+        startFork: threads.startFork,
+        startReview: threads.startReview,
+        startResume: threads.startResume,
+        startCompact: threads.startCompact,
+        startApps: threads.startApps,
+        startMcp: threads.startMcp,
+        startStatus: threads.startStatus,
+        clearActiveImages,
+      });
+      return { threads, queued };
+    });
+
+    expect(handlers).not.toBeNull();
+
+    act(() => {
+      result.current.threads.setActiveThreadId("thread-1");
+    });
+
+    await act(async () => {
+      await result.current.threads.sendUserMessage("Start running turn");
+    });
+
+    await waitFor(() => {
+      expect(result.current.threads.threadStatusById["thread-1"]?.isProcessing).toBe(true);
+      expect(result.current.threads.activeTurnIdByThread["thread-1"]).toBe("turn-1");
+      expect(sendUserMessageService).toHaveBeenCalledTimes(1);
+    });
+
+    await act(async () => {
+      await result.current.queued.handleSend("Queued during turn");
+    });
+
+    expect(result.current.queued.activeQueue).toHaveLength(1);
+    expect(sendUserMessageService).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      handlers?.onRequestUserInput?.({
+        workspace_id: "ws-1",
+        request_id: "request-1",
+        params: {
+          thread_id: "thread-1",
+          turn_id: "turn-1",
+          item_id: "item-1",
+          questions: [],
+        },
+      });
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(result.current.queued.activeQueue).toHaveLength(1);
+    expect(sendUserMessageService).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      handlers?.onTurnCompleted?.("ws-1", "thread-1", "turn-1");
+    });
+
+    await waitFor(() => {
+      expect(sendUserMessageService).toHaveBeenCalledTimes(2);
+    });
+    const queuedCall = vi.mocked(sendUserMessageService).mock.calls[1];
+    expect(queuedCall?.[0]).toBe("ws-1");
+    expect(queuedCall?.[1]).toBe("thread-1");
+    expect(queuedCall?.[2]).toBe("Queued during turn");
+  });
+
+  it("keeps active turn id after request user input so interrupt targets the running turn", async () => {
+    const interruptMock = vi.mocked(interruptTurn);
+    interruptMock.mockResolvedValue({ result: {} });
+
+    const { result } = renderHook(() =>
+      useThreads({
+        activeWorkspace: workspace,
+        onWorkspaceConnected: vi.fn(),
+      }),
+    );
+
+    act(() => {
+      result.current.setActiveThreadId("thread-1");
+      handlers?.onTurnStarted?.("ws-1", "thread-1", "turn-1");
+      handlers?.onRequestUserInput?.({
+        workspace_id: "ws-1",
+        request_id: "request-1",
+        params: {
+          thread_id: "thread-1",
+          turn_id: "turn-1",
+          item_id: "item-1",
+          questions: [],
+        },
+      });
+    });
+
+    await act(async () => {
+      await result.current.interruptTurn();
+    });
+
+    expect(interruptMock).toHaveBeenCalledWith("ws-1", "thread-1", "turn-1");
+    expect(interruptMock).not.toHaveBeenCalledWith("ws-1", "thread-1", "pending");
+  });
+
+  it("uses turn steer after request user input when the turn is still active", async () => {
+    vi.mocked(steerTurn).mockResolvedValue({
+      result: { turnId: "turn-1" },
+    } as Awaited<ReturnType<typeof steerTurn>>);
+    vi.mocked(sendUserMessageService).mockResolvedValue({
+      result: { turn: { id: "turn-2" } },
+    } as Awaited<ReturnType<typeof sendUserMessageService>>);
+
+    const { result } = renderHook(() =>
+      useThreads({
+        activeWorkspace: workspace,
+        onWorkspaceConnected: vi.fn(),
+        steerEnabled: true,
+      }),
+    );
+
+    act(() => {
+      result.current.setActiveThreadId("thread-1");
+      handlers?.onTurnStarted?.("ws-1", "thread-1", "turn-1");
+      handlers?.onRequestUserInput?.({
+        workspace_id: "ws-1",
+        request_id: "request-1",
+        params: {
+          thread_id: "thread-1",
+          turn_id: "turn-1",
+          item_id: "item-1",
+          questions: [],
+        },
+      });
+    });
+
+    expect(result.current.threadStatusById["thread-1"]?.isProcessing).toBe(true);
+    expect(result.current.activeTurnIdByThread["thread-1"]).toBe("turn-1");
+
+    await act(async () => {
+      await result.current.sendUserMessage("Steer after user input");
+    });
+
+    expect(steerTurn).toHaveBeenCalledWith(
+      "ws-1",
+      "thread-1",
+      "turn-1",
+      "Steer after user input",
+      [],
+    );
+    expect(sendUserMessageService).not.toHaveBeenCalled();
+  });
+
   it("links detached review thread to its parent", async () => {
     vi.mocked(startReview).mockResolvedValue({
       result: { reviewThreadId: "thread-review-1" },
@@ -508,7 +783,57 @@ describe("useThreads UX integration", () => {
     ]);
   });
 
-  it("stops parent review spinner and pings parent when detached child exits", async () => {
+  it("classifies live spawned threads from thread source metadata", () => {
+    const { result } = renderHook(() =>
+      useThreads({
+        activeWorkspace: workspace,
+        onWorkspaceConnected: vi.fn(),
+      }),
+    );
+
+    act(() => {
+      handlers?.onThreadStarted?.("ws-1", {
+        id: "thread-child-live",
+        preview: "Child live",
+        source: {
+          subAgent: {
+            thread_spawn: {
+              parent_thread_id: "thread-parent-live",
+              depth: 1,
+            },
+          },
+        },
+      });
+    });
+
+    expect(result.current.threadParentById["thread-child-live"]).toBe("thread-parent-live");
+    expect(result.current.isSubagentThread("ws-1", "thread-child-live")).toBe(true);
+  });
+
+  it("classifies live spawned threads from collab tool events", () => {
+    const { result } = renderHook(() =>
+      useThreads({
+        activeWorkspace: workspace,
+        onWorkspaceConnected: vi.fn(),
+      }),
+    );
+
+    act(() => {
+      handlers?.onItemCompleted?.("ws-1", "thread-parent-live", {
+        type: "collabToolCall",
+        id: "item-collab-live",
+        senderThreadId: "thread-parent-live",
+        newThreadId: "thread-child-live-collab",
+      });
+    });
+
+    expect(result.current.threadParentById["thread-child-live-collab"]).toBe(
+      "thread-parent-live",
+    );
+    expect(result.current.isSubagentThread("ws-1", "thread-child-live-collab")).toBe(true);
+  });
+
+  it("keeps parent unlocked and pings parent when detached child exits", async () => {
     vi.mocked(startReview).mockResolvedValue({
       result: { reviewThreadId: "thread-review-1" },
     });
@@ -529,8 +854,17 @@ describe("useThreads UX integration", () => {
       await result.current.startReview("/review check this");
     });
 
-    expect(result.current.threadStatusById["thread-parent"]?.isReviewing).toBe(true);
-    expect(result.current.threadStatusById["thread-parent"]?.isProcessing).toBe(true);
+    expect(result.current.threadStatusById["thread-parent"]?.isReviewing).toBe(false);
+    expect(result.current.threadStatusById["thread-parent"]?.isProcessing).toBe(false);
+    expect(
+      result.current.activeItems.some(
+        (item) =>
+          item.kind === "message" &&
+          item.role === "assistant" &&
+          item.text.includes("Detached review started.") &&
+          item.text.includes("[Open review thread](/thread/thread-review-1)"),
+      ),
+    ).toBe(true);
 
     act(() => {
       handlers?.onItemCompleted?.("ws-1", "thread-review-1", {
@@ -546,6 +880,55 @@ describe("useThreads UX integration", () => {
         (item) =>
           item.kind === "message" &&
           item.role === "assistant" &&
+          item.text.includes("Detached review completed.") &&
+          item.text.includes("[Open review thread](/thread/thread-review-1)"),
+      ),
+    ).toBe(true);
+  });
+
+  it("preserves parent turn state when detached child exits", async () => {
+    vi.mocked(startReview).mockResolvedValue({
+      result: { reviewThreadId: "thread-review-1" },
+    });
+
+    const { result } = renderHook(() =>
+      useThreads({
+        activeWorkspace: workspace,
+        onWorkspaceConnected: vi.fn(),
+        reviewDeliveryMode: "detached",
+      }),
+    );
+
+    act(() => {
+      result.current.setActiveThreadId("thread-parent");
+    });
+
+    await act(async () => {
+      await result.current.startReview("/review check this");
+    });
+
+    act(() => {
+      handlers?.onTurnStarted?.("ws-1", "thread-parent", "turn-parent-1");
+    });
+
+    expect(result.current.threadStatusById["thread-parent"]?.isProcessing).toBe(true);
+    expect(result.current.activeTurnIdByThread["thread-parent"]).toBe("turn-parent-1");
+
+    act(() => {
+      handlers?.onItemCompleted?.("ws-1", "thread-review-1", {
+        type: "exitedReviewMode",
+        id: "review-exit-1",
+      });
+    });
+
+    expect(result.current.threadStatusById["thread-parent"]?.isProcessing).toBe(true);
+    expect(result.current.activeTurnIdByThread["thread-parent"]).toBe("turn-parent-1");
+    expect(
+      result.current.activeItems.some(
+        (item) =>
+          item.kind === "message" &&
+          item.role === "assistant" &&
+          item.text.includes("Detached review completed.") &&
           item.text.includes("[Open review thread](/thread/thread-review-1)"),
       ),
     ).toBe(true);
@@ -587,9 +970,114 @@ describe("useThreads UX integration", () => {
       (item) =>
         item.kind === "message" &&
         item.role === "assistant" &&
+        item.text.includes("Detached review completed.") &&
         item.text.includes("[Open review thread](/thread/thread-review-1)"),
     );
     expect(notices).toHaveLength(1);
+  });
+
+  it("does not post detached completion notice for generic linked child reviews", () => {
+    const { result } = renderHook(() =>
+      useThreads({
+        activeWorkspace: workspace,
+        onWorkspaceConnected: vi.fn(),
+        reviewDeliveryMode: "detached",
+      }),
+    );
+
+    act(() => {
+      result.current.setActiveThreadId("thread-parent");
+    });
+
+    act(() => {
+      handlers?.onItemCompleted?.("ws-1", "thread-parent", {
+        type: "collabToolCall",
+        id: "item-collab-link-1",
+        senderThreadId: "thread-parent",
+        newThreadId: "thread-linked-1",
+      });
+    });
+
+    act(() => {
+      handlers?.onItemCompleted?.("ws-1", "thread-linked-1", {
+        type: "exitedReviewMode",
+        id: "review-exit-linked-1",
+      });
+    });
+
+    expect(
+      result.current.activeItems.some(
+        (item) =>
+          item.kind === "message" &&
+          item.role === "assistant" &&
+          item.text.includes("[Open review thread](/thread/thread-linked-1)"),
+      ),
+    ).toBe(false);
+  });
+
+  it("restores detached review parent links after relaunch", async () => {
+    vi.mocked(startReview).mockResolvedValue({
+      result: { reviewThreadId: "thread-review-1" },
+    });
+    vi.mocked(listThreads).mockResolvedValue({
+      result: {
+        data: [
+          {
+            id: "thread-parent",
+            preview: "Parent",
+            updated_at: 10,
+            cwd: workspace.path,
+          },
+          {
+            id: "thread-review-1",
+            preview: "Detached review",
+            updated_at: 9,
+            cwd: workspace.path,
+          },
+        ],
+        nextCursor: null,
+      },
+    });
+
+    const first = renderHook(() =>
+      useThreads({
+        activeWorkspace: workspace,
+        onWorkspaceConnected: vi.fn(),
+        reviewDeliveryMode: "detached",
+      }),
+    );
+
+    act(() => {
+      first.result.current.setActiveThreadId("thread-parent");
+    });
+
+    await act(async () => {
+      await first.result.current.startReview("/review check this");
+    });
+
+    expect(first.result.current.threadParentById["thread-review-1"]).toBe("thread-parent");
+    expect(localStorage.getItem(STORAGE_KEY_DETACHED_REVIEW_LINKS)).toContain(
+      "thread-review-1",
+    );
+
+    first.unmount();
+
+    const second = renderHook(() =>
+      useThreads({
+        activeWorkspace: workspace,
+        onWorkspaceConnected: vi.fn(),
+      }),
+    );
+
+    await act(async () => {
+      await second.result.current.listThreadsForWorkspace(workspace);
+    });
+
+    await waitFor(() => {
+      expect(second.result.current.threadParentById["thread-review-1"]).toBe(
+        "thread-parent",
+      );
+    });
   });
 
   it("does not create a parent link for inline reviews", async () => {
@@ -623,6 +1111,7 @@ describe("useThreads UX integration", () => {
     });
 
     expect(result.current.threadParentById["thread-parent"]).toBeUndefined();
+    expect(localStorage.getItem(STORAGE_KEY_DETACHED_REVIEW_LINKS)).toBeNull();
   });
 
   it("orders thread lists, applies custom names, and keeps pin ordering stable", async () => {

@@ -10,8 +10,11 @@ import { sendNotification } from "../../../services/tauri";
 import type { DebugEntry } from "../../../types";
 
 type Params = {
+  enabled?: boolean;
   notificationSoundsEnabled: boolean;
   systemNotificationsEnabled: boolean;
+  subagentSystemNotificationsEnabled: boolean;
+  isSubagentThread?: (workspaceId: string, threadId: string) => boolean;
   getWorkspaceName?: (workspaceId: string) => string | undefined;
   onThreadNotificationSent?: (workspaceId: string, threadId: string) => void;
   onDebug: (entry: DebugEntry) => void;
@@ -20,15 +23,26 @@ type Params = {
 };
 
 export function useUpdaterController({
+  enabled = true,
   notificationSoundsEnabled,
   systemNotificationsEnabled,
+  subagentSystemNotificationsEnabled,
+  isSubagentThread,
   getWorkspaceName,
   onThreadNotificationSent,
   onDebug,
   successSoundUrl,
   errorSoundUrl,
 }: Params) {
-  const { state: updaterState, startUpdate, checkForUpdates, dismiss } = useUpdater({
+  const {
+    state: updaterState,
+    startUpdate,
+    checkForUpdates,
+    dismiss,
+    postUpdateNotice,
+    dismissPostUpdateNotice,
+  } = useUpdater({
+    enabled,
     onDebug,
   });
   const isWindowFocused = useWindowFocusState();
@@ -50,9 +64,13 @@ export function useUpdaterController({
     [onDebug],
   );
 
-  useTauriEvent(subscribeUpdaterCheckEvent, () => {
-    void checkForUpdates({ announceNoUpdate: true });
-  });
+  useTauriEvent(
+    subscribeUpdaterCheckEvent,
+    () => {
+      void checkForUpdates({ announceNoUpdate: true });
+    },
+    { enabled },
+  );
 
   useAgentSoundNotifications({
     enabled: notificationSoundsEnabled,
@@ -62,6 +80,8 @@ export function useUpdaterController({
 
   useAgentSystemNotifications({
     enabled: systemNotificationsEnabled,
+    subagentNotificationsEnabled: subagentSystemNotificationsEnabled,
+    isSubagentThread,
     isWindowFocused,
     getWorkspaceName,
     onThreadNotificationSent,
@@ -99,6 +119,8 @@ export function useUpdaterController({
     startUpdate,
     checkForUpdates,
     dismissUpdate: dismiss,
+    postUpdateNotice,
+    dismissPostUpdateNotice,
     handleTestNotificationSound,
     handleTestSystemNotification,
   };

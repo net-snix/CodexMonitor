@@ -12,6 +12,7 @@ use tokio::sync::{mpsc, oneshot, Mutex};
 use super::protocol::{parse_incoming_line, IncomingMessage, DISCONNECTED_MESSAGE};
 
 pub(crate) type PendingMap = HashMap<u64, oneshot::Sender<Result<Value, String>>>;
+const OUTBOUND_QUEUE_CAPACITY: usize = 512;
 
 #[derive(Clone, Debug)]
 pub(crate) enum RemoteTransportConfig {
@@ -19,36 +20,29 @@ pub(crate) enum RemoteTransportConfig {
         host: String,
         auth_token: Option<String>,
     },
-    OrbitWs {
-        ws_url: String,
-        auth_token: Option<String>,
-    },
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub(crate) enum RemoteTransportKind {
     Tcp,
-    OrbitWs,
 }
 
 impl RemoteTransportConfig {
     pub(crate) fn kind(&self) -> RemoteTransportKind {
         match self {
             RemoteTransportConfig::Tcp { .. } => RemoteTransportKind::Tcp,
-            RemoteTransportConfig::OrbitWs { .. } => RemoteTransportKind::OrbitWs,
         }
     }
 
     pub(crate) fn auth_token(&self) -> Option<&str> {
         match self {
             RemoteTransportConfig::Tcp { auth_token, .. } => auth_token.as_deref(),
-            RemoteTransportConfig::OrbitWs { auth_token, .. } => auth_token.as_deref(),
         }
     }
 }
 
 pub(crate) struct TransportConnection {
-    pub(crate) out_tx: mpsc::UnboundedSender<String>,
+    pub(crate) out_tx: mpsc::Sender<String>,
     pub(crate) pending: Arc<Mutex<PendingMap>>,
     pub(crate) connected: Arc<AtomicBool>,
 }
@@ -69,7 +63,7 @@ where
     R: AsyncRead + Unpin + Send + 'static,
     W: AsyncWrite + Unpin + Send + 'static,
 {
-    let (out_tx, mut out_rx) = mpsc::unbounded_channel::<String>();
+    let (out_tx, mut out_rx) = mpsc::channel::<String>(OUTBOUND_QUEUE_CAPACITY);
     let pending = Arc::new(Mutex::new(PendingMap::new()));
     let pending_for_writer = Arc::clone(&pending);
     let pending_for_reader = Arc::clone(&pending);

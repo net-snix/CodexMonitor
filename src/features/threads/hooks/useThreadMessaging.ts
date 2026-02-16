@@ -3,30 +3,32 @@ import type { Dispatch, MutableRefObject } from "react";
 import * as Sentry from "@sentry/react";
 import type {
   AccessMode,
+  AppMention,
   RateLimitSnapshot,
   CustomPromptOption,
   DebugEntry,
   ReviewTarget,
   WorkspaceInfo,
-} from "../../../types";
+} from "@/types";
 import {
   compactThread as compactThreadService,
   sendUserMessage as sendUserMessageService,
+  steerTurn as steerTurnService,
   startReview as startReviewService,
   interruptTurn as interruptTurnService,
   getAppsList as getAppsListService,
   listMcpServerStatus as listMcpServerStatusService,
-} from "../../../services/tauri";
-import { expandCustomPromptText } from "../../../utils/customPrompts";
+} from "@services/tauri";
+import { expandCustomPromptText } from "@utils/customPrompts";
 import {
   asString,
   extractReviewThreadId,
   extractRpcErrorMessage,
   parseReviewTarget,
-} from "../utils/threadNormalize";
+} from "@threads/utils/threadNormalize";
 import type { ThreadAction, ThreadState } from "./useThreadsReducer";
 import { useReviewPrompt } from "./useReviewPrompt";
-import { formatRelativeTime } from "../../../utils/time";
+import { formatRelativeTime } from "@utils/time";
 
 type SendMessageOptions = {
   skipPromptExpansion?: boolean;
@@ -34,6 +36,7 @@ type SendMessageOptions = {
   effort?: string | null;
   collaborationMode?: Record<string, unknown> | null;
   accessMode?: AccessMode;
+  appMentions?: AppMention[];
 };
 
 type UseThreadMessagingOptions = {
@@ -66,8 +69,17 @@ type UseThreadMessagingOptions = {
   ensureThreadForActiveWorkspace: () => Promise<string | null>;
   ensureThreadForWorkspace: (workspaceId: string) => Promise<string | null>;
   refreshThread: (workspaceId: string, threadId: string) => Promise<string | null>;
-  forkThreadForWorkspace: (workspaceId: string, threadId: string) => Promise<string | null>;
+  forkThreadForWorkspace: (
+    workspaceId: string,
+    threadId: string,
+    options?: { activate?: boolean },
+  ) => Promise<string | null>;
   updateThreadParent: (parentId: string, childIds: string[]) => void;
+  registerDetachedReviewChild?: (
+    workspaceId: string,
+    parentId: string,
+    childId: string,
+  ) => void;
 };
 
 export function useThreadMessaging({
@@ -98,6 +110,7 @@ export function useThreadMessaging({
   refreshThread,
   forkThreadForWorkspace,
   updateThreadParent,
+  registerDetachedReviewChild,
 }: UseThreadMessagingOptions) {
   const sendMessageToThread = useCallback(
     async (
@@ -137,29 +150,12 @@ export function useThreadMessaging({
           : null;
       const resolvedAccessMode =
         options?.accessMode !== undefined ? options.accessMode : accessMode;
+      const appMentions = options?.appMentions ?? [];
 
-      const wasProcessing =
-        (threadStatusById[threadId]?.isProcessing ?? false) && steerEnabled;
-      if (wasProcessing) {
-        const optimisticText = finalText;
-        if (optimisticText || images.length > 0) {
-          dispatch({
-            type: "upsertItem",
-            workspaceId: workspace.id,
-            threadId,
-            item: {
-              id: `optimistic-user-${Date.now()}-${Math.random()
-                .toString(36)
-                .slice(2, 8)}`,
-              kind: "message",
-              role: "user",
-              text: optimisticText,
-              images: images.length > 0 ? images : undefined,
-            },
-            hasCustomName: Boolean(getCustomName(workspace.id, threadId)),
-          });
-        }
-      }
+      const isProcessing = threadStatusById[threadId]?.isProcessing ?? false;
+      const activeTurnId = activeTurnIdByThread[threadId] ?? null;
+      const shouldSteer =
+        isProcessing && steerEnabled && Boolean(activeTurnId);
       Sentry.metrics.count("prompt_sent", 1, {
         attributes: {
           workspace_id: workspace.id,
@@ -182,13 +178,14 @@ export function useThreadMessaging({
       markProcessing(threadId, true);
       safeMessageActivity();
       onDebug?.({
-        id: `${Date.now()}-client-turn-start`,
+        id: `${Date.now()}-${shouldSteer ? "client-turn-steer" : "client-turn-start"}`,
         timestamp: Date.now(),
         source: "client",
-        label: "turn/start",
+        label: shouldSteer ? "turn/steer" : "turn/start",
         payload: {
           workspaceId: workspace.id,
           threadId,
+          turnId: activeTurnId,
           text: finalText,
           images,
           model: resolvedModel,
@@ -196,33 +193,82 @@ export function useThreadMessaging({
           collaborationMode: sanitizedCollaborationMode,
         },
       });
+      const requestMode: "start" | "steer" = shouldSteer ? "steer" : "start";
       try {
-        const response =
-          (await sendUserMessageService(
+        const startTurn = () => {
+          const payload: {
+            model?: string | null;
+            effort?: string | null;
+            collaborationMode?: Record<string, unknown> | null;
+            accessMode?: AccessMode;
+            images?: string[];
+            appMentions?: AppMention[];
+          } = {
+            model: resolvedModel,
+            effort: resolvedEffort,
+            collaborationMode: sanitizedCollaborationMode,
+            accessMode: resolvedAccessMode,
+            images,
+          };
+          if (appMentions.length > 0) {
+            payload.appMentions = appMentions;
+          }
+          return sendUserMessageService(
             workspace.id,
             threadId,
             finalText,
-            {
-              model: resolvedModel,
-              effort: resolvedEffort,
-              collaborationMode: sanitizedCollaborationMode,
-              accessMode: resolvedAccessMode,
+            payload,
+          );
+        };
+
+        const response: Record<string, unknown> = shouldSteer
+          ? (await (appMentions.length > 0
+            ? steerTurnService(
+              workspace.id,
+              threadId,
+              activeTurnId ?? "",
+              finalText,
               images,
-            },
-          )) as Record<string, unknown>;
+              appMentions,
+            )
+            : steerTurnService(
+              workspace.id,
+              threadId,
+              activeTurnId ?? "",
+              finalText,
+              images,
+            ))) as Record<string, unknown>
+          : (await startTurn()) as Record<string, unknown>;
+
+        const rpcError = extractRpcErrorMessage(response);
+
         onDebug?.({
-          id: `${Date.now()}-server-turn-start`,
+          id: `${Date.now()}-${requestMode === "steer" ? "server-turn-steer" : "server-turn-start"}`,
           timestamp: Date.now(),
           source: "server",
-          label: "turn/start response",
+          label: requestMode === "steer" ? "turn/steer response" : "turn/start response",
           payload: response,
         });
-        const rpcError = extractRpcErrorMessage(response);
         if (rpcError) {
-          markProcessing(threadId, false);
-          setActiveTurnId(threadId, null);
-          pushThreadErrorMessage(threadId, `Turn failed to start: ${rpcError}`);
+          if (requestMode !== "steer") {
+            markProcessing(threadId, false);
+            setActiveTurnId(threadId, null);
+          }
+          pushThreadErrorMessage(
+            threadId,
+            requestMode === "steer"
+              ? `Turn steer failed: ${rpcError}`
+              : `Turn failed to start: ${rpcError}`,
+          );
           safeMessageActivity();
+          return;
+        }
+        if (requestMode === "steer") {
+          const result = (response?.result ?? response) as Record<string, unknown>;
+          const steeredTurnId = asString(result?.turnId ?? result?.turn_id ?? "");
+          if (steeredTurnId) {
+            setActiveTurnId(threadId, steeredTurnId);
+          }
           return;
         }
         const result = (response?.result ?? response) as Record<string, unknown>;
@@ -239,18 +285,24 @@ export function useThreadMessaging({
         }
         setActiveTurnId(threadId, turnId);
       } catch (error) {
-        markProcessing(threadId, false);
-        setActiveTurnId(threadId, null);
+        if (requestMode !== "steer") {
+          markProcessing(threadId, false);
+          setActiveTurnId(threadId, null);
+        }
         onDebug?.({
-          id: `${Date.now()}-client-turn-start-error`,
+          id: `${Date.now()}-${requestMode === "steer" ? "client-turn-steer-error" : "client-turn-start-error"}`,
           timestamp: Date.now(),
           source: "error",
-          label: "turn/start error",
+          label: requestMode === "steer" ? "turn/steer error" : "turn/start error",
           payload: error instanceof Error ? error.message : String(error),
         });
         pushThreadErrorMessage(
           threadId,
-          error instanceof Error ? error.message : String(error),
+          requestMode === "steer"
+            ? `Turn steer failed: ${error instanceof Error ? error.message : String(error)}`
+            : error instanceof Error
+              ? error.message
+              : String(error),
         );
         safeMessageActivity();
       }
@@ -261,6 +313,7 @@ export function useThreadMessaging({
       customPrompts,
       dispatch,
       effort,
+      activeTurnIdByThread,
       getCustomName,
       markProcessing,
       model,
@@ -275,7 +328,11 @@ export function useThreadMessaging({
   );
 
   const sendUserMessage = useCallback(
-    async (text: string, images: string[] = []) => {
+    async (
+      text: string,
+      images: string[] = [],
+      appMentions: AppMention[] = [],
+    ) => {
       if (!activeWorkspace) {
         return;
       }
@@ -306,6 +363,7 @@ export function useThreadMessaging({
       }
       await sendMessageToThread(activeWorkspace, threadId, finalText, images, {
         skipPromptExpansion: true,
+        appMentions,
       });
     },
     [
@@ -407,9 +465,12 @@ export function useThreadMessaging({
         return false;
       }
 
-      markProcessing(threadId, true);
-      markReviewing(threadId, true);
-      safeMessageActivity();
+      const lockParentThread = reviewDeliveryMode !== "detached";
+      if (lockParentThread) {
+        markProcessing(threadId, true);
+        markReviewing(threadId, true);
+        safeMessageActivity();
+      }
       onDebug?.({
         id: `${Date.now()}-client-review-start`,
         timestamp: Date.now(),
@@ -437,9 +498,11 @@ export function useThreadMessaging({
         });
         const rpcError = extractRpcErrorMessage(response);
         if (rpcError) {
-          markProcessing(threadId, false);
-          markReviewing(threadId, false);
-          setActiveTurnId(threadId, null);
+          if (lockParentThread) {
+            markProcessing(threadId, false);
+            markReviewing(threadId, false);
+            setActiveTurnId(threadId, null);
+          }
           pushThreadErrorMessage(threadId, `Review failed to start: ${rpcError}`);
           safeMessageActivity();
           return false;
@@ -447,11 +510,16 @@ export function useThreadMessaging({
         const reviewThreadId = extractReviewThreadId(response);
         if (reviewThreadId && reviewThreadId !== threadId) {
           updateThreadParent(threadId, [reviewThreadId]);
+          if (reviewDeliveryMode === "detached") {
+            registerDetachedReviewChild?.(workspaceId, threadId, reviewThreadId);
+          }
         }
         return true;
       } catch (error) {
-        markProcessing(threadId, false);
-        markReviewing(threadId, false);
+        if (lockParentThread) {
+          markProcessing(threadId, false);
+          markReviewing(threadId, false);
+        }
         onDebug?.({
           id: `${Date.now()}-client-review-start-error`,
           timestamp: Date.now(),
@@ -478,6 +546,7 @@ export function useThreadMessaging({
       safeMessageActivity,
       setActiveTurnId,
       reviewDeliveryMode,
+      registerDetachedReviewChild,
       updateThreadParent,
     ],
   );
@@ -744,6 +813,7 @@ export function useThreadMessaging({
           activeWorkspace.id,
           null,
           100,
+          threadId,
         )) as Record<string, unknown> | null;
         const result = (response?.result ?? response) as
           | Record<string, unknown>

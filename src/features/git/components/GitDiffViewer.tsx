@@ -5,18 +5,30 @@ import { FileDiff, WorkerPoolContextProvider } from "@pierre/diffs/react";
 import type { FileDiffMetadata } from "@pierre/diffs";
 import { parsePatchFiles } from "@pierre/diffs";
 import RotateCcw from "lucide-react/dist/esm/icons/rotate-ccw";
+import GitCommitHorizontal from "lucide-react/dist/esm/icons/git-commit-horizontal";
 import { workerFactory } from "../../../utils/diffsWorker";
-import type { GitHubPullRequest, GitHubPullRequestComment } from "../../../types";
+import type {
+  GitHubPullRequest,
+  GitHubPullRequestComment,
+  PullRequestReviewAction,
+  PullRequestReviewIntent,
+  PullRequestSelectionRange,
+} from "../../../types";
 import { formatRelativeTime } from "../../../utils/time";
+import { parseDiff, type ParsedDiffLine } from "../../../utils/diff";
 import {
   DIFF_VIEWER_HIGHLIGHTER_OPTIONS,
   DIFF_VIEWER_SCROLL_CSS,
 } from "../../design-system/diff/diffViewerTheme";
 import { Markdown } from "../../messages/components/Markdown";
 import { ImageDiffCard } from "./ImageDiffCard";
+import { DiffBlock } from "./DiffBlock";
+import { splitPath } from "./GitDiffPanel.utils";
+import { usePullRequestLineSelection } from "../hooks/usePullRequestLineSelection";
 
 type GitDiffViewerItem = {
   path: string;
+  displayPath?: string;
   status: string;
   diff: string;
   oldLines?: string[];
@@ -40,6 +52,18 @@ type GitDiffViewerProps = {
   pullRequestComments?: GitHubPullRequestComment[];
   pullRequestCommentsLoading?: boolean;
   pullRequestCommentsError?: string | null;
+  pullRequestReviewActions?: PullRequestReviewAction[];
+  onRunPullRequestReview?: (options: {
+    intent: PullRequestReviewIntent;
+    question?: string;
+    selection?: PullRequestSelectionRange | null;
+    images?: string[];
+  }) => Promise<string | null>;
+  pullRequestReviewLaunching?: boolean;
+  pullRequestReviewThreadId?: string | null;
+  onCheckoutPullRequest?: (
+    pullRequest: GitHubPullRequest,
+  ) => Promise<void> | void;
   canRevert?: boolean;
   onRevertFile?: (path: string) => Promise<void> | void;
   onActivePathChange?: (path: string) => void;
@@ -52,6 +76,44 @@ function normalizePatchName(name: string) {
   return name.replace(/^(?:a|b)\//, "");
 }
 
+function parseRawDiffLines(diff: string): ParsedDiffLine[] {
+  return diff
+    .split("\n")
+    .filter((line) => line.trim().length > 0)
+    .map((line) => {
+      if (line.startsWith("+") && !line.startsWith("+++")) {
+        return {
+          type: "add",
+          oldLine: null,
+          newLine: null,
+          text: line.slice(1),
+        } satisfies ParsedDiffLine;
+      }
+      if (line.startsWith("-") && !line.startsWith("---")) {
+        return {
+          type: "del",
+          oldLine: null,
+          newLine: null,
+          text: line.slice(1),
+        } satisfies ParsedDiffLine;
+      }
+      if (line.startsWith(" ")) {
+        return {
+          type: "context",
+          oldLine: null,
+          newLine: null,
+          text: line.slice(1),
+        } satisfies ParsedDiffLine;
+      }
+      return {
+        type: "meta",
+        oldLine: null,
+        newLine: null,
+        text: line,
+      } satisfies ParsedDiffLine;
+    });
+}
+
 type DiffCardProps = {
   entry: GitDiffViewerItem;
   isSelected: boolean;
@@ -60,6 +122,20 @@ type DiffCardProps = {
   ignoreWhitespaceChanges: boolean;
   showRevert: boolean;
   onRequestRevert?: (path: string) => void;
+  interactiveSelectionEnabled: boolean;
+  selectedRange?: { start: number; end: number } | null;
+  onLineSelect?: (index: number, shiftKey: boolean) => void;
+  onLineMouseDown?: (index: number, button: number, shiftKey: boolean) => void;
+  onLineMouseEnter?: (index: number) => void;
+  onLineMouseUp?: () => void;
+  reviewActions?: PullRequestReviewAction[];
+  onRunReviewAction?: (
+    intent: PullRequestReviewIntent,
+    parsedLines: ParsedDiffLine[],
+  ) => void | Promise<void>;
+  onClearSelection?: () => void;
+  pullRequestReviewLaunching?: boolean;
+  pullRequestReviewThreadId?: string | null;
 };
 
 const DiffCard = memo(function DiffCard({
@@ -70,7 +146,24 @@ const DiffCard = memo(function DiffCard({
   ignoreWhitespaceChanges,
   showRevert,
   onRequestRevert,
+  interactiveSelectionEnabled,
+  selectedRange = null,
+  onLineSelect,
+  onLineMouseDown,
+  onLineMouseEnter,
+  onLineMouseUp,
+  reviewActions = [],
+  onRunReviewAction,
+  onClearSelection,
+  pullRequestReviewLaunching = false,
+  pullRequestReviewThreadId = null,
 }: DiffCardProps) {
+  const displayPath = entry.displayPath ?? entry.path;
+  const { name: fileName, dir } = useMemo(
+    () => splitPath(displayPath),
+    [displayPath],
+  );
+  const displayDir = dir ? `${dir}/` : "";
   const diffOptions = useMemo(
     () => ({
       diffStyle,
@@ -91,7 +184,7 @@ const DiffCard = memo(function DiffCard({
     if (!parsed) {
       return null;
     }
-    const normalizedName = normalizePatchName(parsed.name || entry.path);
+    const normalizedName = normalizePatchName(parsed.name || displayPath);
     const normalizedPrevName = parsed.prevName
       ? normalizePatchName(parsed.prevName)
       : undefined;
@@ -102,7 +195,7 @@ const DiffCard = memo(function DiffCard({
       oldLines: entry.oldLines,
       newLines: entry.newLines,
     } satisfies FileDiffMetadata;
-  }, [entry.diff, entry.newLines, entry.oldLines, entry.path]);
+  }, [displayPath, entry.diff, entry.newLines, entry.oldLines]);
 
   const placeholder = useMemo(() => {
     if (isLoading) {
@@ -114,16 +207,35 @@ const DiffCard = memo(function DiffCard({
     return "Diff unavailable.";
   }, [entry.diff, ignoreWhitespaceChanges, isLoading]);
 
+  const parsedLines = useMemo(() => {
+    const parsed = parseDiff(entry.diff);
+    if (parsed.length > 0) {
+      return parsed;
+    }
+    return parseRawDiffLines(entry.diff);
+  }, [entry.diff]);
+  const hasSelectableLines = useMemo(
+    () =>
+      parsedLines.some(
+        (line) => line.type === "add" || line.type === "del" || line.type === "context",
+      ),
+    [parsedLines],
+  );
+  const useInteractiveDiff = interactiveSelectionEnabled && hasSelectableLines;
+
   return (
-      <div
-        data-diff-path={entry.path}
-        className={`diff-viewer-item ${isSelected ? "active" : ""}`}
-      >
+    <div
+      data-diff-path={entry.path}
+      className={`diff-viewer-item ${isSelected ? "active" : ""}`}
+    >
       <div className="diff-viewer-header">
         <span className="diff-viewer-status" data-status={entry.status}>
           {entry.status}
         </span>
-        <span className="diff-viewer-path">{entry.path}</span>
+        <span className="diff-viewer-path" title={displayPath}>
+          <span className="diff-viewer-name">{fileName}</span>
+          {displayDir && <span className="diff-viewer-dir">{displayDir}</span>}
+        </span>
         {showRevert && (
           <button
             type="button"
@@ -133,19 +245,80 @@ const DiffCard = memo(function DiffCard({
             onClick={(event) => {
               event.preventDefault();
               event.stopPropagation();
-              onRequestRevert?.(entry.path);
+              onRequestRevert?.(displayPath);
             }}
           >
             <RotateCcw size={14} aria-hidden />
           </button>
         )}
       </div>
-      {entry.diff.trim().length > 0 && fileDiff ? (
+      {useInteractiveDiff && selectedRange && reviewActions.length > 0 ? (
+        <div className="diff-viewer-review-actions" role="toolbar" aria-label="PR selection actions">
+          {reviewActions.map((action) => (
+            <button
+              key={action.id}
+              type="button"
+              className="ghost diff-viewer-review-action"
+              disabled={pullRequestReviewLaunching}
+              onClick={() => {
+                if (!onRunReviewAction) {
+                  return;
+                }
+                void onRunReviewAction(action.intent, parsedLines);
+              }}
+            >
+              {action.label}
+            </button>
+          ))}
+          <button
+            type="button"
+            className="ghost diff-viewer-review-action"
+            onClick={onClearSelection}
+          >
+            Clear
+          </button>
+          {pullRequestReviewThreadId ? (
+            <span className="diff-viewer-review-thread">
+              Last review thread: {pullRequestReviewThreadId}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+      {useInteractiveDiff ? (
+        <div className="diff-viewer-output diff-viewer-output-flat">
+          <DiffBlock
+            diff={entry.diff}
+            parsedLines={parsedLines}
+            onLineSelect={(_line, index, event) => {
+              onLineSelect?.(index, event.shiftKey);
+            }}
+            onLineMouseDown={(_line, index, event) => {
+              event.preventDefault();
+              onLineMouseDown?.(index, event.button, event.shiftKey);
+            }}
+            onLineMouseEnter={(_line, index) => {
+              onLineMouseEnter?.(index);
+            }}
+            onLineMouseUp={() => {
+              onLineMouseUp?.();
+            }}
+            selectedRange={selectedRange}
+          />
+        </div>
+      ) : entry.diff.trim().length > 0 && fileDiff ? (
         <div className="diff-viewer-output diff-viewer-output-flat">
           <FileDiff
             fileDiff={fileDiff}
             options={diffOptions}
             style={{ width: "100%", maxWidth: "100%", minWidth: 0 }}
+          />
+        </div>
+      ) : entry.diff.trim().length > 0 && parsedLines.length > 0 ? (
+        <div className="diff-viewer-output diff-viewer-output-flat">
+          <DiffBlock
+            diff={entry.diff}
+            parsedLines={parsedLines}
+            showLineNumbers={false}
           />
         </div>
       ) : (
@@ -163,6 +336,9 @@ type PullRequestSummaryProps = {
   pullRequestComments?: GitHubPullRequestComment[];
   pullRequestCommentsLoading: boolean;
   pullRequestCommentsError?: string | null;
+  onCheckoutPullRequest?: (
+    pullRequest: GitHubPullRequest,
+  ) => Promise<void> | void;
 };
 
 const PullRequestSummary = memo(function PullRequestSummary({
@@ -173,6 +349,7 @@ const PullRequestSummary = memo(function PullRequestSummary({
   pullRequestComments,
   pullRequestCommentsLoading,
   pullRequestCommentsError,
+  onCheckoutPullRequest,
 }: PullRequestSummaryProps) {
   const prUpdatedLabel = pullRequest.updatedAt
     ? formatRelativeTime(new Date(pullRequest.updatedAt).getTime())
@@ -180,6 +357,7 @@ const PullRequestSummary = memo(function PullRequestSummary({
   const prAuthor = pullRequest.author?.login ?? "unknown";
   const prBody = pullRequest.body?.trim() ?? "";
   const [isTimelineExpanded, setIsTimelineExpanded] = useState(false);
+  const [isCheckingOut, setIsCheckingOut] = useState(false);
   const sortedComments = useMemo(() => {
     if (!pullRequestComments?.length) {
       return [];
@@ -213,22 +391,40 @@ const PullRequestSummary = memo(function PullRequestSummary({
               {pullRequest.title}
             </span>
           </div>
-          {hasDiffs && (
-            <button
-              type="button"
-              className="ghost diff-viewer-pr-jump"
-              onClick={onJumpToFirstFile}
-              aria-label="Jump to first file"
-            >
-              <span className="diff-viewer-pr-jump-add">
-                +{diffStats.additions}
-              </span>
-              <span className="diff-viewer-pr-jump-sep">/</span>
-              <span className="diff-viewer-pr-jump-del">
-                -{diffStats.deletions}
-              </span>
-            </button>
-          )}
+          <div className="diff-viewer-pr-header-actions">
+            {hasDiffs && (
+              <button
+                type="button"
+                className="ghost diff-viewer-pr-jump"
+                onClick={onJumpToFirstFile}
+                aria-label="Jump to first file"
+              >
+                <span className="diff-viewer-pr-jump-add">
+                  +{diffStats.additions}
+                </span>
+                <span className="diff-viewer-pr-jump-sep">/</span>
+                <span className="diff-viewer-pr-jump-del">
+                  -{diffStats.deletions}
+                </span>
+              </button>
+            )}
+            {onCheckoutPullRequest ? (
+              <button
+                type="button"
+                className="ghost diff-viewer-pr-checkout"
+                aria-label={`Checkout PR #${pullRequest.number} branch`}
+                disabled={isCheckingOut}
+                onClick={() => {
+                  setIsCheckingOut(true);
+                  Promise.resolve(onCheckoutPullRequest(pullRequest)).finally(() => {
+                    setIsCheckingOut(false);
+                  });
+                }}
+              >
+                {isCheckingOut ? "Checking out..." : "Checkout Branch"}
+              </button>
+            ) : null}
+          </div>
         </div>
         <div className="diff-viewer-pr-meta">
           <span className="diff-viewer-pr-author">@{prAuthor}</span>
@@ -356,6 +552,11 @@ export function GitDiffViewer({
   pullRequestComments,
   pullRequestCommentsLoading = false,
   pullRequestCommentsError = null,
+  pullRequestReviewActions = [],
+  onRunPullRequestReview,
+  pullRequestReviewLaunching = false,
+  pullRequestReviewThreadId = null,
+  onCheckoutPullRequest,
   canRevert = false,
   onRevertFile,
   onActivePathChange,
@@ -369,6 +570,21 @@ export function GitDiffViewer({
   const rowResizeObserversRef = useRef(new Map<Element, ResizeObserver>());
   const rowNodesByPathRef = useRef(new Map<string, HTMLDivElement>());
   const hasActivePathHandler = Boolean(onActivePathChange);
+  const interactiveSelectionEnabled = Boolean(
+    pullRequest &&
+      diffStyle === "unified" &&
+      onRunPullRequestReview &&
+      pullRequestReviewActions.length > 0,
+  );
+  const {
+    clearSelection,
+    selectLine,
+    startDragSelection,
+    updateDragSelection,
+    finishDragSelection,
+    selectedRangeForPath,
+    buildSelectionRange,
+  } = usePullRequestLineSelection();
   const poolOptions = useMemo(() => ({ workerFactory }), []);
   const highlighterOptions = useMemo(
     () => DIFF_VIEWER_HIGHLIGHTER_OPTIONS,
@@ -427,8 +643,37 @@ export function GitDiffViewer({
     }
     return diffs[0];
   }, [diffs, selectedPath, indexByPath]);
+  const stickyPathDisplay = useMemo(() => {
+    if (!stickyEntry) {
+      return null;
+    }
+    const stickyPath = stickyEntry.displayPath ?? stickyEntry.path;
+    const { name, dir } = splitPath(stickyPath);
+    return { fileName: name, displayDir: dir ? `${dir}/` : "" };
+  }, [stickyEntry]);
 
   const showRevert = canRevert && Boolean(onRevertFile);
+
+  const handleRunSelectionReview = useCallback(
+    async (
+      intent: PullRequestReviewIntent,
+      entry: GitDiffViewerItem,
+      parsedLines: ParsedDiffLine[],
+    ) => {
+      if (!onRunPullRequestReview) {
+        return;
+      }
+      const selection = buildSelectionRange(entry.path, entry.status, parsedLines);
+      if (!selection) {
+        return;
+      }
+      await onRunPullRequestReview({
+        intent,
+        selection,
+      });
+    },
+    [buildSelectionRange, onRunPullRequestReview],
+  );
   const handleRequestRevert = useCallback(
     async (path: string) => {
       if (!onRevertFile) {
@@ -475,6 +720,16 @@ export function GitDiffViewer({
   useEffect(() => {
     activePathRef.current = selectedPath;
   }, [selectedPath]);
+
+  useEffect(() => {
+    if (!interactiveSelectionEnabled) {
+      clearSelection();
+    }
+  }, [clearSelection, interactiveSelectionEnabled]);
+
+  useEffect(() => {
+    clearSelection();
+  }, [clearSelection, pullRequest?.number]);
 
   useEffect(() => {
     onActivePathChangeRef.current = onActivePathChange;
@@ -581,13 +836,29 @@ export function GitDiffViewer({
     }
     rowVirtualizer.scrollToIndex(0, { align: "start" });
   }, [diffs.length, rowVirtualizer]);
+  const emptyStateCopy = pullRequest
+    ? {
+        title: "No file changes in this pull request",
+        subtitle:
+          "The pull request loaded, but there are no diff hunks to render for this selection.",
+        hint: "Try switching to another pull request or commit from the Git panel.",
+      }
+    : {
+        title: "Working tree is clean",
+        subtitle: "No local changes were detected for the current workspace.",
+        hint: "Make an edit, stage a file, or select a commit to inspect changes here.",
+      };
 
   return (
     <WorkerPoolContextProvider
       poolOptions={poolOptions}
       highlighterOptions={highlighterOptions}
     >
-      <div className="diff-viewer ds-diff-viewer" ref={containerRef}>
+      <div
+        className="diff-viewer ds-diff-viewer"
+        ref={containerRef}
+        onMouseUp={finishDragSelection}
+      >
         {pullRequest && (
           <PullRequestSummary
             pullRequest={pullRequest}
@@ -597,6 +868,7 @@ export function GitDiffViewer({
             pullRequestComments={pullRequestComments}
             pullRequestCommentsLoading={pullRequestCommentsLoading}
             pullRequestCommentsError={pullRequestCommentsError}
+            onCheckoutPullRequest={onCheckoutPullRequest}
           />
         )}
         {!error && stickyEntry && (
@@ -608,7 +880,17 @@ export function GitDiffViewer({
               >
                 {stickyEntry.status}
               </span>
-              <span className="diff-viewer-path">{stickyEntry.path}</span>
+              <span
+                className="diff-viewer-path"
+                title={stickyEntry.displayPath ?? stickyEntry.path}
+              >
+                <span className="diff-viewer-name">
+                  {stickyPathDisplay?.fileName ?? stickyEntry.path}
+                </span>
+                {stickyPathDisplay?.displayDir && (
+                  <span className="diff-viewer-dir">{stickyPathDisplay.displayDir}</span>
+                )}
+              </span>
               {showRevert && (
                 <button
                   type="button"
@@ -618,7 +900,9 @@ export function GitDiffViewer({
                   onClick={(event) => {
                     event.preventDefault();
                     event.stopPropagation();
-                    void handleRequestRevert(stickyEntry.path);
+                    void handleRequestRevert(
+                      stickyEntry.displayPath ?? stickyEntry.path,
+                    );
                   }}
                 >
                   <RotateCcw size={14} aria-hidden />
@@ -634,7 +918,15 @@ export function GitDiffViewer({
           </div>
         )}
         {!error && !isLoading && !diffs.length && (
-          <div className="diff-viewer-empty">No changes detected.</div>
+          <div className="diff-viewer-empty-state" role="status" aria-live="polite">
+            <div className="diff-viewer-empty-glow" aria-hidden />
+            <span className="diff-viewer-empty-icon" aria-hidden>
+              <GitCommitHorizontal size={18} />
+            </span>
+            <h3 className="diff-viewer-empty-title">{emptyStateCopy.title}</h3>
+            <p className="diff-viewer-empty-subtitle">{emptyStateCopy.subtitle}</p>
+            <p className="diff-viewer-empty-hint">{emptyStateCopy.hint}</p>
+          </div>
         )}
         {!error && diffs.length > 0 && (
           <div
@@ -677,6 +969,28 @@ export function GitDiffViewer({
                       ignoreWhitespaceChanges={ignoreWhitespaceChanges}
                       showRevert={showRevert}
                       onRequestRevert={(path) => void handleRequestRevert(path)}
+                      interactiveSelectionEnabled={interactiveSelectionEnabled}
+                      selectedRange={selectedRangeForPath(entry.path)}
+                      onLineSelect={(index, shiftKey) => {
+                        selectLine(entry.path, index, shiftKey);
+                      }}
+                      onLineMouseDown={(index, button, shiftKey) => {
+                        if (button !== 0) {
+                          return;
+                        }
+                        startDragSelection(entry.path, index, shiftKey);
+                      }}
+                      onLineMouseEnter={(index) => {
+                        updateDragSelection(entry.path, index);
+                      }}
+                      onLineMouseUp={finishDragSelection}
+                      reviewActions={pullRequestReviewActions}
+                      onRunReviewAction={(intent, parsedLines) => {
+                        void handleRunSelectionReview(intent, entry, parsedLines);
+                      }}
+                      onClearSelection={clearSelection}
+                      pullRequestReviewLaunching={pullRequestReviewLaunching}
+                      pullRequestReviewThreadId={pullRequestReviewThreadId}
                     />
                   )}
                 </div>

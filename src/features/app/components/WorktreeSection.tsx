@@ -29,15 +29,18 @@ type WorktreeSectionProps = {
   expandedWorkspaces: Set<string>;
   activeWorkspaceId: string | null;
   activeThreadId: string | null;
+  pendingUserInputKeys?: Set<string>;
   getThreadRows: (
     threads: ThreadSummary[],
     isExpanded: boolean,
     workspaceId: string,
     getPinTimestamp: (workspaceId: string, threadId: string) => number | null,
+    pinVersion?: number,
   ) => ThreadRowsResult;
   getThreadTime: (thread: ThreadSummary) => string | null;
   isThreadPinned: (workspaceId: string, threadId: string) => boolean;
   getPinTimestamp: (workspaceId: string, threadId: string) => number | null;
+  pinnedThreadsVersion: number;
   onSelectWorkspace: (id: string) => void;
   onConnectWorkspace: (workspace: WorkspaceInfo) => void;
   onToggleWorkspaceCollapse: (workspaceId: string, collapsed: boolean) => void;
@@ -64,10 +67,12 @@ export function WorktreeSection({
   expandedWorkspaces,
   activeWorkspaceId,
   activeThreadId,
+  pendingUserInputKeys,
   getThreadRows,
   getThreadTime,
   isThreadPinned,
   getPinTimestamp,
+  pinnedThreadsVersion,
   onSelectWorkspace,
   onConnectWorkspace,
   onToggleWorkspaceCollapse,
@@ -109,6 +114,7 @@ export function WorktreeSection({
             isWorktreeExpanded,
             worktree.id,
             getPinTimestamp,
+            pinnedThreadsVersion,
           );
 
           return (
@@ -136,6 +142,7 @@ export function WorktreeSection({
                   activeWorkspaceId={activeWorkspaceId}
                   activeThreadId={activeThreadId}
                   threadStatusById={threadStatusById}
+                  pendingUserInputKeys={pendingUserInputKeys}
                   getThreadTime={getThreadTime}
                   isThreadPinned={isThreadPinned}
                   onToggleExpanded={onToggleExpanded}

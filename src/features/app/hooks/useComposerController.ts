@@ -1,14 +1,16 @@
 import { useCallback, useMemo, useState } from "react";
-import type { QueuedMessage, WorkspaceInfo } from "../../../types";
+import type { AppMention, QueuedMessage, WorkspaceInfo } from "../../../types";
 import { useComposerImages } from "../../composer/hooks/useComposerImages";
 import { useQueuedSend } from "../../threads/hooks/useQueuedSend";
 
 export function useComposerController({
   activeThreadId,
+  activeTurnId,
   activeWorkspaceId,
   activeWorkspace,
   isProcessing,
   isReviewing,
+  queueFlushPaused = false,
   steerEnabled,
   appsEnabled,
   connectWorkspace,
@@ -24,10 +26,12 @@ export function useComposerController({
   startStatus,
 }: {
   activeThreadId: string | null;
+  activeTurnId: string | null;
   activeWorkspaceId: string | null;
   activeWorkspace: WorkspaceInfo | null;
   isProcessing: boolean;
   isReviewing: boolean;
+  queueFlushPaused?: boolean;
   steerEnabled: boolean;
   appsEnabled: boolean;
   connectWorkspace: (workspace: WorkspaceInfo) => Promise<void>;
@@ -35,7 +39,11 @@ export function useComposerController({
     workspaceId: string,
     options?: { activate?: boolean },
   ) => Promise<string | null>;
-  sendUserMessage: (text: string, images?: string[]) => Promise<void>;
+  sendUserMessage: (
+    text: string,
+    images?: string[],
+    appMentions?: AppMention[],
+  ) => Promise<void>;
   sendUserMessageToThread: (
     workspace: WorkspaceInfo,
     threadId: string,
@@ -75,8 +83,10 @@ export function useComposerController({
     removeQueuedMessage,
   } = useQueuedSend({
     activeThreadId,
+    activeTurnId,
     isProcessing,
     isReviewing,
+    queueFlushPaused,
     steerEnabled,
     appsEnabled,
     activeWorkspace,
@@ -114,11 +124,11 @@ export function useComposerController({
   );
 
   const handleSendPrompt = useCallback(
-    (text: string) => {
+    (text: string, appMentions?: AppMention[]) => {
       if (!text.trim()) {
         return;
       }
-      void handleSend(text, []);
+      void handleSend(text, [], appMentions);
     },
     [handleSend],
   );

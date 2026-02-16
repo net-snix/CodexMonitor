@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { QueuedMessage, WorkspaceInfo } from "../../../types";
+import type { AppMention, QueuedMessage, WorkspaceInfo } from "@/types";
 
 type UseQueuedSendOptions = {
   activeThreadId: string | null;
+  activeTurnId: string | null;
   isProcessing: boolean;
   isReviewing: boolean;
+  queueFlushPaused?: boolean;
   steerEnabled: boolean;
   appsEnabled: boolean;
   activeWorkspace: WorkspaceInfo | null;
@@ -13,7 +15,11 @@ type UseQueuedSendOptions = {
     workspaceId: string,
     options?: { activate?: boolean },
   ) => Promise<string | null>;
-  sendUserMessage: (text: string, images?: string[]) => Promise<void>;
+  sendUserMessage: (
+    text: string,
+    images?: string[],
+    appMentions?: AppMention[],
+  ) => Promise<void>;
   sendUserMessageToThread: (
     workspace: WorkspaceInfo,
     threadId: string,
@@ -33,8 +39,16 @@ type UseQueuedSendOptions = {
 type UseQueuedSendResult = {
   queuedByThread: Record<string, QueuedMessage[]>;
   activeQueue: QueuedMessage[];
-  handleSend: (text: string, images?: string[]) => Promise<void>;
-  queueMessage: (text: string, images?: string[]) => Promise<void>;
+  handleSend: (
+    text: string,
+    images?: string[],
+    appMentions?: AppMention[],
+  ) => Promise<void>;
+  queueMessage: (
+    text: string,
+    images?: string[],
+    appMentions?: AppMention[],
+  ) => Promise<void>;
   removeQueuedMessage: (threadId: string, messageId: string) => void;
 };
 
@@ -78,8 +92,10 @@ function parseSlashCommand(text: string, appsEnabled: boolean): SlashCommandKind
 
 export function useQueuedSend({
   activeThreadId,
+  activeTurnId,
   isProcessing,
   isReviewing,
+  queueFlushPaused = false,
   steerEnabled,
   appsEnabled,
   activeWorkspace,
@@ -190,22 +206,28 @@ export function useQueuedSend({
   );
 
   const handleSend = useCallback(
-    async (text: string, images: string[] = []) => {
+    async (
+      text: string,
+      images: string[] = [],
+      appMentions: AppMention[] = [],
+    ) => {
       const trimmed = text.trim();
       const command = parseSlashCommand(trimmed, appsEnabled);
       const nextImages = command ? [] : images;
+      const nextMentions = command ? [] : appMentions;
       if (!trimmed && nextImages.length === 0) {
         return;
       }
       if (activeThreadId && isReviewing) {
         return;
       }
-      if (isProcessing && activeThreadId && !steerEnabled) {
+      if (isProcessing && activeThreadId && (!steerEnabled || !activeTurnId)) {
         const item: QueuedMessage = {
           id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
           text: trimmed,
           createdAt: Date.now(),
           images: nextImages,
+          ...(nextMentions.length > 0 ? { appMentions: nextMentions } : {}),
         };
         enqueueMessage(activeThreadId, item);
         clearActiveImages();
@@ -219,7 +241,11 @@ export function useQueuedSend({
         clearActiveImages();
         return;
       }
-      await sendUserMessage(trimmed, nextImages);
+      if (nextMentions.length > 0) {
+        await sendUserMessage(trimmed, nextImages, nextMentions);
+      } else {
+        await sendUserMessage(trimmed, nextImages);
+      }
       clearActiveImages();
     },
     [
@@ -229,6 +255,7 @@ export function useQueuedSend({
       clearActiveImages,
       connectWorkspace,
       enqueueMessage,
+      activeTurnId,
       isProcessing,
       isReviewing,
       steerEnabled,
@@ -238,10 +265,15 @@ export function useQueuedSend({
   );
 
   const queueMessage = useCallback(
-    async (text: string, images: string[] = []) => {
+    async (
+      text: string,
+      images: string[] = [],
+      appMentions: AppMention[] = [],
+    ) => {
       const trimmed = text.trim();
       const command = parseSlashCommand(trimmed, appsEnabled);
       const nextImages = command ? [] : images;
+      const nextMentions = command ? [] : appMentions;
       if (!trimmed && nextImages.length === 0) {
         return;
       }
@@ -256,6 +288,7 @@ export function useQueuedSend({
         text: trimmed,
         createdAt: Date.now(),
         images: nextImages,
+        ...(nextMentions.length > 0 ? { appMentions: nextMentions } : {}),
       };
       enqueueMessage(activeThreadId, item);
       clearActiveImages();
@@ -293,7 +326,7 @@ export function useQueuedSend({
   ]);
 
   useEffect(() => {
-    if (!activeThreadId || isProcessing || isReviewing) {
+    if (!activeThreadId || isProcessing || isReviewing || queueFlushPaused) {
       return;
     }
     if (inFlightByThread[activeThreadId]) {
@@ -318,7 +351,12 @@ export function useQueuedSend({
         if (command) {
           await runSlashCommand(command, trimmed);
         } else {
-          await sendUserMessage(nextItem.text, nextItem.images ?? []);
+          const queuedMentions = nextItem.appMentions ?? [];
+          if (queuedMentions.length > 0) {
+            await sendUserMessage(nextItem.text, nextItem.images ?? [], queuedMentions);
+          } else {
+            await sendUserMessage(nextItem.text, nextItem.images ?? []);
+          }
         }
       } catch {
         setInFlightByThread((prev) => ({ ...prev, [threadId]: null }));
@@ -332,6 +370,7 @@ export function useQueuedSend({
     inFlightByThread,
     isProcessing,
     isReviewing,
+    queueFlushPaused,
     prependQueuedMessage,
     queuedByThread,
     runSlashCommand,

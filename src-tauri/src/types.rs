@@ -187,62 +187,9 @@ pub(crate) struct LocalUsageSnapshot {
     pub(crate) top_models: Vec<LocalUsageModel>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct OrbitConnectTestResult {
-    pub(crate) ok: bool,
-    pub(crate) latency_ms: Option<u64>,
-    pub(crate) message: String,
-    #[serde(default)]
-    pub(crate) details: Option<String>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct OrbitDeviceCodeStart {
-    pub(crate) device_code: String,
-    #[serde(default)]
-    pub(crate) user_code: Option<String>,
-    pub(crate) verification_uri: String,
-    #[serde(default)]
-    pub(crate) verification_uri_complete: Option<String>,
-    pub(crate) interval_seconds: u32,
-    pub(crate) expires_in_seconds: u32,
-}
-
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub(crate) enum OrbitSignInStatus {
-    Pending,
-    Authorized,
-    Denied,
-    Expired,
-    Error,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct OrbitSignInPollResult {
-    pub(crate) status: OrbitSignInStatus,
-    #[serde(default)]
-    pub(crate) token: Option<String>,
-    #[serde(default)]
-    pub(crate) message: Option<String>,
-    #[serde(default)]
-    pub(crate) interval_seconds: Option<u32>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct OrbitSignOutResult {
-    pub(crate) success: bool,
-    #[serde(default)]
-    pub(crate) message: Option<String>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub(crate) enum OrbitRunnerState {
+pub(crate) enum TcpDaemonState {
     Stopped,
     Running,
     Error,
@@ -250,8 +197,8 @@ pub(crate) enum OrbitRunnerState {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct OrbitRunnerStatus {
-    pub(crate) state: OrbitRunnerState,
+pub(crate) struct TcpDaemonStatus {
+    pub(crate) state: TcpDaemonState,
     #[serde(default)]
     pub(crate) pid: Option<u32>,
     #[serde(default)]
@@ -259,7 +206,7 @@ pub(crate) struct OrbitRunnerStatus {
     #[serde(default)]
     pub(crate) last_error: Option<String>,
     #[serde(default)]
-    pub(crate) orbit_url: Option<String>,
+    pub(crate) listen_addr: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -418,6 +365,19 @@ pub(crate) struct OpenAppTarget {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+pub(crate) struct RemoteBackendTarget {
+    pub(crate) id: String,
+    pub(crate) name: String,
+    pub(crate) provider: RemoteBackendProvider,
+    #[serde(default = "default_remote_backend_host")]
+    pub(crate) host: String,
+    #[serde(default)]
+    pub(crate) token: Option<String>,
+    #[serde(default, rename = "lastConnectedAtMs")]
+    pub(crate) last_connected_at_ms: Option<i64>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub(crate) struct AppSettings {
     #[serde(default, rename = "codexBin")]
     pub(crate) codex_bin: Option<String>,
@@ -431,20 +391,12 @@ pub(crate) struct AppSettings {
     pub(crate) remote_backend_host: String,
     #[serde(default, rename = "remoteBackendToken")]
     pub(crate) remote_backend_token: Option<String>,
-    #[serde(default, rename = "orbitWsUrl")]
-    pub(crate) orbit_ws_url: Option<String>,
-    #[serde(default, rename = "orbitAuthUrl")]
-    pub(crate) orbit_auth_url: Option<String>,
-    #[serde(default, rename = "orbitRunnerName")]
-    pub(crate) orbit_runner_name: Option<String>,
-    #[serde(default, rename = "orbitAutoStartRunner")]
-    pub(crate) orbit_auto_start_runner: bool,
-    #[serde(default, rename = "orbitUseAccess")]
-    pub(crate) orbit_use_access: bool,
-    #[serde(default, rename = "orbitAccessClientId")]
-    pub(crate) orbit_access_client_id: Option<String>,
-    #[serde(default, rename = "orbitAccessClientSecretRef")]
-    pub(crate) orbit_access_client_secret_ref: Option<String>,
+    #[serde(default = "default_remote_backends", rename = "remoteBackends")]
+    pub(crate) remote_backends: Vec<RemoteBackendTarget>,
+    #[serde(default, rename = "activeRemoteBackendId")]
+    pub(crate) active_remote_backend_id: Option<String>,
+    #[serde(default, rename = "keepDaemonRunningAfterAppClose")]
+    pub(crate) keep_daemon_running_after_app_close: bool,
     #[serde(default = "default_access_mode", rename = "defaultAccessMode")]
     pub(crate) default_access_mode: String,
     #[serde(
@@ -549,6 +501,13 @@ pub(crate) struct AppSettings {
         rename = "showMessageFilePath"
     )]
     pub(crate) show_message_file_path: bool,
+    #[serde(
+        default = "default_chat_history_scrollback_items",
+        rename = "chatHistoryScrollbackItems"
+    )]
+    pub(crate) chat_history_scrollback_items: Option<u32>,
+    #[serde(default, rename = "threadTitleAutogenerationEnabled")]
+    pub(crate) thread_title_autogeneration_enabled: bool,
     #[serde(default = "default_ui_font_family", rename = "uiFontFamily")]
     pub(crate) ui_font_family: String,
     #[serde(default = "default_code_font_family", rename = "codeFontFamily")]
@@ -560,6 +519,8 @@ pub(crate) struct AppSettings {
         rename = "notificationSoundsEnabled"
     )]
     pub(crate) notification_sounds_enabled: bool,
+    #[serde(default = "default_split_chat_diff_view", rename = "splitChatDiffView")]
+    pub(crate) split_chat_diff_view: bool,
     #[serde(default = "default_preload_git_diffs", rename = "preloadGitDiffs")]
     pub(crate) preload_git_diffs: bool,
     #[serde(
@@ -568,10 +529,20 @@ pub(crate) struct AppSettings {
     )]
     pub(crate) git_diff_ignore_whitespace_changes: bool,
     #[serde(
+        default = "default_commit_message_prompt",
+        rename = "commitMessagePrompt"
+    )]
+    pub(crate) commit_message_prompt: String,
+    #[serde(
         default = "default_system_notifications_enabled",
         rename = "systemNotificationsEnabled"
     )]
     pub(crate) system_notifications_enabled: bool,
+    #[serde(
+        default = "default_subagent_system_notifications_enabled",
+        rename = "subagentSystemNotificationsEnabled"
+    )]
+    pub(crate) subagent_system_notifications_enabled: bool,
     #[serde(
         default = "default_experimental_collab_enabled",
         rename = "experimentalCollabEnabled"
@@ -588,6 +559,11 @@ pub(crate) struct AppSettings {
         alias = "experimentalSteerEnabled"
     )]
     pub(crate) steer_enabled: bool,
+    #[serde(
+        default = "default_pause_queued_messages_when_response_required",
+        rename = "pauseQueuedMessagesWhenResponseRequired"
+    )]
+    pub(crate) pause_queued_messages_when_response_required: bool,
     #[serde(
         default = "default_unified_exec_enabled",
         rename = "unifiedExecEnabled",
@@ -671,7 +647,7 @@ pub(crate) enum BackendMode {
 
 impl Default for BackendMode {
     fn default() -> Self {
-        BackendMode::Local
+        default_backend_mode()
     }
 }
 
@@ -679,7 +655,6 @@ impl Default for BackendMode {
 #[serde(rename_all = "lowercase")]
 pub(crate) enum RemoteBackendProvider {
     Tcp,
-    Orbit,
 }
 
 impl Default for RemoteBackendProvider {
@@ -696,8 +671,20 @@ fn default_review_delivery_mode() -> String {
     "inline".to_string()
 }
 
+fn default_backend_mode() -> BackendMode {
+    if cfg!(target_os = "ios") {
+        BackendMode::Remote
+    } else {
+        BackendMode::Local
+    }
+}
+
 fn default_remote_backend_host() -> String {
     "127.0.0.1:4732".to_string()
+}
+
+fn default_remote_backends() -> Vec<RemoteBackendTarget> {
+    Vec::new()
 }
 
 fn default_ui_scale() -> f64 {
@@ -714,6 +701,10 @@ fn default_usage_show_remaining() -> bool {
 
 fn default_show_message_file_path() -> bool {
     true
+}
+
+fn default_chat_history_scrollback_items() -> Option<u32> {
+    Some(200)
 }
 
 fn default_ui_font_family() -> String {
@@ -884,12 +875,29 @@ fn default_system_notifications_enabled() -> bool {
     true
 }
 
+fn default_subagent_system_notifications_enabled() -> bool {
+    true
+}
+
+fn default_split_chat_diff_view() -> bool {
+    false
+}
+
 fn default_preload_git_diffs() -> bool {
     true
 }
 
 fn default_git_diff_ignore_whitespace_changes() -> bool {
     false
+}
+
+fn default_commit_message_prompt() -> String {
+    "Generate a concise git commit message for the following changes. \
+Follow conventional commit format (e.g., feat:, fix:, refactor:, docs:, etc.). \
+Keep the summary line under 72 characters. \
+Only output the commit message, nothing else.\n\n\
+Changes:\n{diff}"
+        .to_string()
 }
 
 fn default_experimental_collab_enabled() -> bool {
@@ -901,6 +909,10 @@ fn default_collaboration_modes_enabled() -> bool {
 }
 
 fn default_steer_enabled() -> bool {
+    true
+}
+
+fn default_pause_queued_messages_when_response_required() -> bool {
     true
 }
 
@@ -1093,17 +1105,13 @@ impl Default for AppSettings {
         Self {
             codex_bin: None,
             codex_args: None,
-            backend_mode: BackendMode::Local,
+            backend_mode: default_backend_mode(),
             remote_backend_provider: RemoteBackendProvider::Tcp,
             remote_backend_host: default_remote_backend_host(),
             remote_backend_token: None,
-            orbit_ws_url: None,
-            orbit_auth_url: None,
-            orbit_runner_name: None,
-            orbit_auto_start_runner: false,
-            orbit_use_access: false,
-            orbit_access_client_id: None,
-            orbit_access_client_secret_ref: None,
+            remote_backends: default_remote_backends(),
+            active_remote_backend_id: None,
+            keep_daemon_running_after_app_close: false,
             default_access_mode: "current".to_string(),
             review_delivery_mode: default_review_delivery_mode(),
             composer_model_shortcut: default_composer_model_shortcut(),
@@ -1129,16 +1137,23 @@ impl Default for AppSettings {
             theme: default_theme(),
             usage_show_remaining: default_usage_show_remaining(),
             show_message_file_path: default_show_message_file_path(),
+            chat_history_scrollback_items: default_chat_history_scrollback_items(),
+            thread_title_autogeneration_enabled: false,
             ui_font_family: default_ui_font_family(),
             code_font_family: default_code_font_family(),
             code_font_size: default_code_font_size(),
             notification_sounds_enabled: true,
             system_notifications_enabled: true,
+            subagent_system_notifications_enabled: true,
+            split_chat_diff_view: default_split_chat_diff_view(),
             preload_git_diffs: default_preload_git_diffs(),
             git_diff_ignore_whitespace_changes: default_git_diff_ignore_whitespace_changes(),
+            commit_message_prompt: default_commit_message_prompt(),
             experimental_collab_enabled: false,
             collaboration_modes_enabled: true,
             steer_enabled: true,
+            pause_queued_messages_when_response_required:
+                default_pause_queued_messages_when_response_required(),
             unified_exec_enabled: true,
             experimental_apps_enabled: false,
             personality: default_personality(),
@@ -1175,20 +1190,24 @@ mod tests {
     fn app_settings_defaults_from_empty_json() {
         let settings: AppSettings = serde_json::from_str("{}").expect("settings deserialize");
         assert!(settings.codex_bin.is_none());
-        assert!(matches!(settings.backend_mode, BackendMode::Local));
+        let expected_backend_mode = if cfg!(target_os = "ios") {
+            BackendMode::Remote
+        } else {
+            BackendMode::Local
+        };
+        assert!(matches!(
+            (&settings.backend_mode, &expected_backend_mode),
+            (BackendMode::Local, BackendMode::Local) | (BackendMode::Remote, BackendMode::Remote)
+        ));
         assert!(matches!(
             settings.remote_backend_provider,
             RemoteBackendProvider::Tcp
         ));
         assert_eq!(settings.remote_backend_host, "127.0.0.1:4732");
         assert!(settings.remote_backend_token.is_none());
-        assert!(settings.orbit_ws_url.is_none());
-        assert!(settings.orbit_auth_url.is_none());
-        assert!(settings.orbit_runner_name.is_none());
-        assert!(!settings.orbit_auto_start_runner);
-        assert!(!settings.orbit_use_access);
-        assert!(settings.orbit_access_client_id.is_none());
-        assert!(settings.orbit_access_client_secret_ref.is_none());
+        assert!(settings.remote_backends.is_empty());
+        assert!(settings.active_remote_backend_id.is_none());
+        assert!(!settings.keep_daemon_running_after_app_close);
         assert_eq!(settings.default_access_mode, "current");
         assert_eq!(settings.review_delivery_mode, "inline");
         let expected_primary = if cfg!(target_os = "macos") {
@@ -1280,15 +1299,21 @@ mod tests {
         assert_eq!(settings.theme, "system");
         assert!(!settings.usage_show_remaining);
         assert!(settings.show_message_file_path);
+        assert_eq!(settings.chat_history_scrollback_items, Some(200));
+        assert!(!settings.thread_title_autogeneration_enabled);
         assert!(settings.ui_font_family.contains("system-ui"));
         assert!(settings.code_font_family.contains("ui-monospace"));
         assert_eq!(settings.code_font_size, 11);
         assert!(settings.notification_sounds_enabled);
         assert!(settings.system_notifications_enabled);
+        assert!(settings.subagent_system_notifications_enabled);
+        assert!(!settings.split_chat_diff_view);
         assert!(settings.preload_git_diffs);
         assert!(!settings.git_diff_ignore_whitespace_changes);
+        assert!(settings.commit_message_prompt.contains("{diff}"));
         assert!(settings.collaboration_modes_enabled);
         assert!(settings.steer_enabled);
+        assert!(settings.pause_queued_messages_when_response_required);
         assert!(settings.unified_exec_enabled);
         assert!(!settings.experimental_apps_enabled);
         assert_eq!(settings.personality, "friendly");

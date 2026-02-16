@@ -113,10 +113,46 @@ export type ReviewTarget =
   | { type: "commit"; sha: string; title?: string }
   | { type: "custom"; instructions: string };
 
+export type PullRequestReviewIntent =
+  | "full"
+  | "risks"
+  | "tests"
+  | "summary"
+  | "question";
+
+export type PullRequestReviewAction = {
+  id: string;
+  label: string;
+  intent: PullRequestReviewIntent;
+};
+
+export type PullRequestSelectionLine = {
+  type: "add" | "del" | "context";
+  oldLine: number | null;
+  newLine: number | null;
+  text: string;
+};
+
+export type PullRequestSelectionRange = {
+  path: string;
+  status: string;
+  start: number;
+  end: number;
+  lines: PullRequestSelectionLine[];
+};
+
 export type AccessMode = "read-only" | "current" | "full-access";
 export type BackendMode = "local" | "remote";
-export type RemoteBackendProvider = "tcp" | "orbit";
-export type ThemePreference = "system" | "light" | "dark" | "dim" | "xp";
+export type RemoteBackendProvider = "tcp";
+export type RemoteBackendTarget = {
+  id: string;
+  name: string;
+  provider: RemoteBackendProvider;
+  host: string;
+  token: string | null;
+  lastConnectedAtMs?: number | null;
+};
+export type ThemePreference = "system" | "light" | "dark" | "dim";
 export type PersonalityPreference = "friendly" | "pragmatic";
 
 
@@ -149,13 +185,9 @@ export type AppSettings = {
   remoteBackendProvider: RemoteBackendProvider;
   remoteBackendHost: string;
   remoteBackendToken: string | null;
-  orbitWsUrl: string | null;
-  orbitAuthUrl: string | null;
-  orbitRunnerName: string | null;
-  orbitAutoStartRunner: boolean;
-  orbitUseAccess: boolean;
-  orbitAccessClientId: string | null;
-  orbitAccessClientSecretRef: string | null;
+  remoteBackends: RemoteBackendTarget[];
+  activeRemoteBackendId: string | null;
+  keepDaemonRunningAfterAppClose: boolean;
   defaultAccessMode: AccessMode;
   reviewDeliveryMode: "inline" | "detached";
   composerModelShortcut: string | null;
@@ -182,16 +214,22 @@ export type AppSettings = {
   theme: ThemePreference;
   usageShowRemaining: boolean;
   showMessageFilePath: boolean;
+  chatHistoryScrollbackItems: number | null;
+  threadTitleAutogenerationEnabled: boolean;
   uiFontFamily: string;
   codeFontFamily: string;
   codeFontSize: number;
   notificationSoundsEnabled: boolean;
   systemNotificationsEnabled: boolean;
+  subagentSystemNotificationsEnabled: boolean;
+  splitChatDiffView: boolean;
   preloadGitDiffs: boolean;
   gitDiffIgnoreWhitespaceChanges: boolean;
+  commitMessagePrompt: string;
   experimentalCollabEnabled: boolean;
   collaborationModesEnabled: boolean;
   steerEnabled: boolean;
+  pauseQueuedMessagesWhenResponseRequired: boolean;
   unifiedExecEnabled: boolean;
   experimentalAppsEnabled: boolean;
   personality: PersonalityPreference;
@@ -213,49 +251,31 @@ export type AppSettings = {
   selectedOpenAppId: string;
 };
 
-export type OrbitConnectTestResult = {
-  ok: boolean;
-  latencyMs: number | null;
-  message: string;
-  details?: string | null;
+export type CodexFeatureStage =
+  | "under_development"
+  | "beta"
+  | "stable"
+  | "deprecated"
+  | "removed";
+
+export type CodexFeature = {
+  name: string;
+  stage: CodexFeatureStage;
+  enabled: boolean;
+  defaultEnabled: boolean;
+  displayName: string | null;
+  description: string | null;
+  announcement: string | null;
 };
 
-export type OrbitDeviceCodeStart = {
-  deviceCode: string;
-  userCode: string | null;
-  verificationUri: string;
-  verificationUriComplete: string | null;
-  intervalSeconds: number;
-  expiresInSeconds: number;
-};
+export type TcpDaemonState = "stopped" | "running" | "error";
 
-export type OrbitSignInStatus =
-  | "pending"
-  | "authorized"
-  | "denied"
-  | "expired"
-  | "error";
-
-export type OrbitSignInPollResult = {
-  status: OrbitSignInStatus;
-  token: string | null;
-  message: string | null;
-  intervalSeconds: number | null;
-};
-
-export type OrbitSignOutResult = {
-  success: boolean;
-  message: string | null;
-};
-
-export type OrbitRunnerState = "stopped" | "running" | "error";
-
-export type OrbitRunnerStatus = {
-  state: OrbitRunnerState;
+export type TcpDaemonStatus = {
+  state: TcpDaemonState;
   pid: number | null;
   startedAtMs: number | null;
   lastError: string | null;
-  orbitUrl: string | null;
+  listenAddr: string | null;
 };
 
 export type TailscaleStatus = {
@@ -288,6 +308,19 @@ export type CodexDoctorResult = {
   nodeOk: boolean;
   nodeVersion: string | null;
   nodeDetails: string | null;
+};
+
+export type CodexUpdateMethod = "brew_formula" | "brew_cask" | "npm" | "unknown";
+
+export type CodexUpdateResult = {
+  ok: boolean;
+  method: CodexUpdateMethod;
+  package: string | null;
+  beforeVersion: string | null;
+  afterVersion: string | null;
+  upgraded: boolean;
+  output: string | null;
+  details: string | null;
 };
 
 export type ApprovalRequest = {
@@ -520,6 +553,12 @@ export type QueuedMessage = {
   text: string;
   createdAt: number;
   images?: string[];
+  appMentions?: AppMention[];
+};
+
+export type AppMention = {
+  name: string;
+  path: string;
 };
 
 export type ModelOption = {
