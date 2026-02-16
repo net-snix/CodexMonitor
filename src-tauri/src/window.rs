@@ -55,7 +55,7 @@ pub(crate) fn apply_window_appearance(window: &Window, theme: &str) -> Result<()
     #[cfg(desktop)]
     {
         let next_theme = match theme {
-            "light" => Some(Theme::Light),
+            "light" | "xp" => Some(Theme::Light),
             "dark" | "dim" => Some(Theme::Dark),
             _ => None,
         };
