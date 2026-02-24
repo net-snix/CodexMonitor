@@ -76,7 +76,10 @@ fn github_repo_names_match_normalizes_and_ignores_case() {
         "https://github.com/Owner/Repo.git",
         "owner/repo"
     ));
-    assert!(commands::github_repo_names_match("OWNER/REPO", "owner/repo"));
+    assert!(commands::github_repo_names_match(
+        "OWNER/REPO",
+        "owner/repo"
+    ));
 }
 
 #[test]
@@ -91,11 +94,15 @@ fn github_repo_names_match_detects_mismatch() {
 fn validate_normalized_repo_name_rejects_empty_slug_after_normalization() {
     assert_eq!(
         commands::validate_normalized_repo_name(".git"),
-        Err("Repository name is empty after normalization. Use 'repo' or 'owner/repo'.".to_string())
+        Err(
+            "Repository name is empty after normalization. Use 'repo' or 'owner/repo'.".to_string()
+        )
     );
     assert_eq!(
         commands::validate_normalized_repo_name("git@github.com:.git"),
-        Err("Repository name is empty after normalization. Use 'repo' or 'owner/repo'.".to_string())
+        Err(
+            "Repository name is empty after normalization. Use 'repo' or 'owner/repo'.".to_string()
+        )
     );
 }
 
@@ -137,7 +144,6 @@ fn get_git_status_omits_global_ignored_paths() {
         id: "w1".to_string(),
         name: "w1".to_string(),
         path: root.to_string_lossy().to_string(),
-        codex_bin: None,
         kind: WorkspaceKind::Main,
         parent_id: None,
         worktree: None,
@@ -195,7 +201,6 @@ fn get_git_diffs_omits_global_ignored_paths() {
         id: "w1".to_string(),
         name: "w1".to_string(),
         path: root.to_string_lossy().to_string(),
-        codex_bin: None,
         kind: WorkspaceKind::Main,
         parent_id: None,
         worktree: None,

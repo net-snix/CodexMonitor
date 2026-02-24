@@ -27,14 +27,13 @@ const FEATURE_DESCRIPTION_FALLBACKS: Record<string, string> = {
   powershell_utf8: "Enforce UTF-8 output in PowerShell.",
   enable_request_compression:
     "Compress streaming request bodies sent to codex-backend.",
-  collab: "Enable sub-agent collaboration tools.",
   apps: "Enable ChatGPT Apps integration.",
   apps_mcp_gateway: "Route Apps MCP calls through the configured gateway.",
   skill_mcp_dependency_install:
     "Allow prompting and installing missing MCP dependencies.",
   skill_env_var_dependency_prompt:
     "Prompt for missing skill environment variable dependencies.",
-  steer: "Enter submits immediately instead of queueing.",
+  steer: "Enable turn steering capability when supported by Codex.",
   collaboration_modes: "Enable collaboration mode presets.",
   personality: "Enable personality selection.",
   responses_websockets:
@@ -77,7 +76,6 @@ function featureSubtitle(feature: CodexFeature): string {
 export function SettingsFeaturesSection({
   appSettings,
   hasFeatureWorkspace,
-  hasCodexHomeOverrides,
   openConfigError,
   featureError,
   featuresLoading,
@@ -95,13 +93,6 @@ export function SettingsFeaturesSection({
       <div className="settings-section-subtitle">
         Manage stable and experimental Codex features.
       </div>
-      {hasCodexHomeOverrides && (
-        <div className="settings-help">
-          Feature settings are stored in the default CODEX_HOME config.toml.
-          <br />
-          Workspace overrides are not updated.
-        </div>
-      )}
       <div className="settings-toggle-row">
         <div>
           <div className="settings-toggle-title">Config file</div>

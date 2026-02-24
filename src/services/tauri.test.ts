@@ -1,19 +1,22 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
-import { open } from "@tauri-apps/plugin-dialog";
+import { open, save } from "@tauri-apps/plugin-dialog";
 import * as notification from "@tauri-apps/plugin-notification";
 import {
+  exportMarkdownFile,
   addWorkspace,
   compactThread,
   createGitHubRepo,
   fetchGit,
   forkThread,
   getAppsList,
+  getAgentsSettings,
   getExperimentalFeatureList,
   getGitHubIssues,
   getGitLog,
   getGitStatus,
   getOpenAppIcon,
+  listThreads,
   listMcpServerStatus,
   readGlobalAgentsMd,
   readGlobalCodexConfigToml,
@@ -27,6 +30,7 @@ import {
   steerTurn,
   sendNotification,
   setCodexFeatureFlag,
+  setAgentsCoreSettings,
   startReview,
   setThreadName,
   tailscaleDaemonStart,
@@ -37,6 +41,13 @@ import {
   pickWorkspacePaths,
   writeGlobalAgentsMd,
   writeGlobalCodexConfigToml,
+  createAgent,
+  updateAgent,
+  deleteAgent,
+  readAgentConfigToml,
+  readImageAsDataUrl,
+  generateAgentDescription,
+  writeAgentConfigToml,
   writeAgentMd,
 } from "./tauri";
 
@@ -46,6 +57,7 @@ vi.mock("@tauri-apps/api/core", () => ({
 
 vi.mock("@tauri-apps/plugin-dialog", () => ({
   open: vi.fn(),
+  save: vi.fn(),
 }));
 
 vi.mock("@tauri-apps/plugin-notification", () => ({
@@ -62,19 +74,24 @@ describe("tauri invoke wrappers", () => {
       if (command === "is_macos_debug_build") {
         return false;
       }
+      if (command === "get_app_settings") {
+        return { backendMode: "local" };
+      }
+      if (command === "is_mobile_runtime") {
+        return false;
+      }
       return undefined;
     });
   });
 
-  it("uses codex_bin for addWorkspace", async () => {
+  it("uses path-only payload for addWorkspace", async () => {
     const invokeMock = vi.mocked(invoke);
     invokeMock.mockResolvedValueOnce({ id: "ws-1" });
 
-    await addWorkspace("/tmp/project", null);
+    await addWorkspace("/tmp/project");
 
     expect(invokeMock).toHaveBeenCalledWith("add_workspace", {
       path: "/tmp/project",
-      codex_bin: null,
     });
   });
 
@@ -97,6 +114,36 @@ describe("tauri invoke wrappers", () => {
     openMock.mockResolvedValueOnce(["/tmp/one", "/tmp/two"]);
 
     await expect(pickWorkspacePaths()).resolves.toEqual(["/tmp/one", "/tmp/two"]);
+  });
+
+  it("returns null when markdown export is cancelled", async () => {
+    const saveMock = vi.mocked(save);
+    const invokeMock = vi.mocked(invoke);
+    saveMock.mockResolvedValueOnce(null);
+
+    await expect(exportMarkdownFile("# Plan")).resolves.toBeNull();
+    expect(invokeMock).not.toHaveBeenCalledWith(
+      "write_text_file",
+      expect.anything(),
+    );
+  });
+
+  it("writes markdown to the selected path", async () => {
+    const saveMock = vi.mocked(save);
+    const invokeMock = vi.mocked(invoke);
+    saveMock.mockResolvedValueOnce("/tmp/plan.md");
+
+    await expect(exportMarkdownFile("# Plan", "my-plan.md")).resolves.toBe("/tmp/plan.md");
+
+    expect(saveMock).toHaveBeenCalledWith({
+      title: "Export plan as Markdown",
+      defaultPath: "my-plan.md",
+      filters: [{ name: "Markdown", extensions: ["md"] }],
+    });
+    expect(invokeMock).toHaveBeenCalledWith("write_text_file", {
+      path: "/tmp/plan.md",
+      content: "# Plan",
+    });
   });
 
   it("maps workspace_id to workspaceId for git status", async () => {
@@ -222,6 +269,20 @@ describe("tauri invoke wrappers", () => {
     });
   });
 
+  it("maps workspaceId/cursor/limit/sortKey for list_threads", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce({});
+
+    await listThreads("ws-10", "cursor-1", 25, "updated_at");
+
+    expect(invokeMock).toHaveBeenCalledWith("list_threads", {
+      workspaceId: "ws-10",
+      cursor: "cursor-1",
+      limit: 25,
+      sortKey: "updated_at",
+    });
+  });
+
   it("maps workspaceId/cursor/limit/threadId for apps_list", async () => {
     const invokeMock = vi.mocked(invoke);
     invokeMock.mockResolvedValueOnce({});
@@ -253,10 +314,10 @@ describe("tauri invoke wrappers", () => {
     const invokeMock = vi.mocked(invoke);
     invokeMock.mockResolvedValueOnce(undefined);
 
-    await setCodexFeatureFlag("collab", true);
+    await setCodexFeatureFlag("apps", true);
 
     expect(invokeMock).toHaveBeenCalledWith("set_codex_feature_flag", {
-      featureKey: "collab",
+      featureKey: "apps",
       enabled: true,
     });
   });
@@ -409,6 +470,146 @@ describe("tauri invoke wrappers", () => {
     });
   });
 
+  it("reads agents settings", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce({
+      configPath: "/Users/me/.codex/config.toml",
+      multiAgentEnabled: true,
+      maxThreads: 6,
+      maxDepth: 1,
+      agents: [],
+    });
+
+    await getAgentsSettings();
+
+    expect(invokeMock).toHaveBeenCalledWith("get_agents_settings");
+  });
+
+  it("updates core agents settings", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce({
+      configPath: "/Users/me/.codex/config.toml",
+      multiAgentEnabled: false,
+      maxThreads: 4,
+      maxDepth: 3,
+      agents: [],
+    });
+
+    await setAgentsCoreSettings({
+      multiAgentEnabled: false,
+      maxThreads: 4,
+      maxDepth: 3,
+    });
+
+    expect(invokeMock).toHaveBeenCalledWith("set_agents_core_settings", {
+      input: { multiAgentEnabled: false, maxThreads: 4, maxDepth: 3 },
+    });
+  });
+
+  it("creates an agent", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce({});
+
+    await createAgent({
+      name: "researcher",
+      description: "Research-focused role",
+      developerInstructions: "Investigate root cause first.",
+      template: "blank",
+      model: "gpt-5-codex",
+      reasoningEffort: "medium",
+    });
+
+    expect(invokeMock).toHaveBeenCalledWith("create_agent", {
+      input: {
+        name: "researcher",
+        description: "Research-focused role",
+        developerInstructions: "Investigate root cause first.",
+        template: "blank",
+        model: "gpt-5-codex",
+        reasoningEffort: "medium",
+      },
+    });
+  });
+
+  it("updates an agent", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce({});
+
+    await updateAgent({
+      originalName: "researcher",
+      name: "code_reviewer",
+      description: "Review-focused role",
+      developerInstructions: "Focus on correctness and regression risk.",
+      renameManagedFile: true,
+    });
+
+    expect(invokeMock).toHaveBeenCalledWith("update_agent", {
+      input: {
+        originalName: "researcher",
+        name: "code_reviewer",
+        description: "Review-focused role",
+        developerInstructions: "Focus on correctness and regression risk.",
+        renameManagedFile: true,
+      },
+    });
+  });
+
+  it("deletes an agent", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce({});
+
+    await deleteAgent({
+      name: "researcher",
+      deleteManagedFile: true,
+    });
+
+    expect(invokeMock).toHaveBeenCalledWith("delete_agent", {
+      input: {
+        name: "researcher",
+        deleteManagedFile: true,
+      },
+    });
+  });
+
+  it("reads an agent config file", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce("model = \"gpt-5-codex\"");
+
+    await readAgentConfigToml("researcher");
+
+    expect(invokeMock).toHaveBeenCalledWith("read_agent_config_toml", {
+      agentName: "researcher",
+    });
+  });
+
+  it("writes an agent config file", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce({});
+
+    await writeAgentConfigToml("researcher", "model = \"gpt-5-codex\"");
+
+    expect(invokeMock).toHaveBeenCalledWith("write_agent_config_toml", {
+      agentName: "researcher",
+      content: "model = \"gpt-5-codex\"",
+    });
+  });
+
+  it("generates an improved agent description", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce({
+      description: "Stabilizes flaky test suites",
+      developerInstructions:
+        "Reproduce failures first.\nPrefer deterministic fixes.\nAdd targeted coverage.",
+    });
+
+    await generateAgentDescription("ws-agent", "tests");
+
+    expect(invokeMock).toHaveBeenCalledWith("generate_agent_description", {
+      workspaceId: "ws-agent",
+      description: "tests",
+    });
+  });
+
   it("fills sendUserMessage defaults in payload", async () => {
     const invokeMock = vi.mocked(invoke);
     invokeMock.mockResolvedValueOnce({});
@@ -426,6 +627,50 @@ describe("tauri invoke wrappers", () => {
       effort: null,
       accessMode: "full-access",
       images: ["image.png"],
+    });
+  });
+
+  it("maps read_image_as_data_url", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce("data:image/png;base64,abc");
+
+    await readImageAsDataUrl("/tmp/image.png");
+
+    expect(invokeMock).toHaveBeenCalledWith("read_image_as_data_url", {
+      path: "/tmp/image.png",
+    });
+  });
+
+  it("converts image paths before send_user_message in remote mode", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockImplementation(async (command: string) => {
+      if (command === "is_macos_debug_build") {
+        return false;
+      }
+      if (command === "get_app_settings") {
+        return { backendMode: "remote" };
+      }
+      if (command === "is_mobile_runtime") {
+        return false;
+      }
+      if (command === "read_image_as_data_url") {
+        return "data:image/png;base64,abc";
+      }
+      return undefined;
+    });
+
+    await sendUserMessage("ws-4", "thread-1", "hello", {
+      images: ["/tmp/image.png"],
+    });
+
+    expect(invokeMock).toHaveBeenCalledWith("send_user_message", {
+      workspaceId: "ws-4",
+      threadId: "thread-1",
+      text: "hello",
+      model: null,
+      effort: null,
+      accessMode: null,
+      images: ["data:image/png;base64,abc"],
     });
   });
 
@@ -462,6 +707,92 @@ describe("tauri invoke wrappers", () => {
       text: "continue",
       images: ["image.png"],
     });
+  });
+
+  it("converts image paths before turn_steer in remote mode", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockImplementation(async (command: string) => {
+      if (command === "is_macos_debug_build") {
+        return false;
+      }
+      if (command === "get_app_settings") {
+        return { backendMode: "remote" };
+      }
+      if (command === "is_mobile_runtime") {
+        return false;
+      }
+      if (command === "read_image_as_data_url") {
+        return "data:image/jpeg;base64,xyz";
+      }
+      return undefined;
+    });
+
+    await steerTurn("ws-4", "thread-1", "turn-2", "continue", ["/tmp/image.jpg"]);
+
+    expect(invokeMock).toHaveBeenCalledWith("turn_steer", {
+      workspaceId: "ws-4",
+      threadId: "thread-1",
+      turnId: "turn-2",
+      text: "continue",
+      images: ["data:image/jpeg;base64,xyz"],
+    });
+  });
+
+  it("converts image paths on mobile even in local backend mode", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockImplementation(async (command: string) => {
+      if (command === "is_macos_debug_build") {
+        return false;
+      }
+      if (command === "get_app_settings") {
+        return { backendMode: "local" };
+      }
+      if (command === "is_mobile_runtime") {
+        return true;
+      }
+      if (command === "read_image_as_data_url") {
+        return "data:image/png;base64,mobile";
+      }
+      return undefined;
+    });
+
+    await sendUserMessage("ws-4", "thread-1", "hello", {
+      images: ["/private/var/mobile/sample.png"],
+    });
+
+    expect(invokeMock).toHaveBeenCalledWith("send_user_message", {
+      workspaceId: "ws-4",
+      threadId: "thread-1",
+      text: "hello",
+      model: null,
+      effort: null,
+      accessMode: null,
+      images: ["data:image/png;base64,mobile"],
+    });
+  });
+
+  it("fails when image conversion fails for send_user_message", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockImplementation(async (command: string) => {
+      if (command === "is_macos_debug_build") {
+        return false;
+      }
+      if (command === "get_app_settings") {
+        return { backendMode: "remote" };
+      }
+      if (command === "is_mobile_runtime") {
+        return false;
+      }
+      if (command === "read_image_as_data_url") {
+        throw new Error("conversion failed");
+      }
+      return undefined;
+    });
+
+    await expect(
+      sendUserMessage("ws-4", "thread-1", "hello", { images: ["/tmp/image.png"] }),
+    ).rejects.toThrow("conversion failed");
+    expect(invokeMock).not.toHaveBeenCalledWith("send_user_message", expect.anything());
   });
 
   it("omits delivery when starting reviews without override", async () => {

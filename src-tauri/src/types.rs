@@ -251,7 +251,6 @@ pub(crate) struct WorkspaceEntry {
     pub(crate) id: String,
     pub(crate) name: String,
     pub(crate) path: String,
-    pub(crate) codex_bin: Option<String>,
     #[serde(default)]
     pub(crate) kind: WorkspaceKind,
     #[serde(default, rename = "parentId")]
@@ -268,7 +267,6 @@ pub(crate) struct WorkspaceInfo {
     pub(crate) name: String,
     pub(crate) path: String,
     pub(crate) connected: bool,
-    pub(crate) codex_bin: Option<String>,
     #[serde(default)]
     pub(crate) kind: WorkspaceKind,
     #[serde(default, rename = "parentId")]
@@ -321,12 +319,10 @@ pub(crate) struct WorkspaceSettings {
     pub(crate) sort_order: Option<u32>,
     #[serde(default, rename = "groupId")]
     pub(crate) group_id: Option<String>,
+    #[serde(default, rename = "cloneSourceWorkspaceId")]
+    pub(crate) clone_source_workspace_id: Option<String>,
     #[serde(default, rename = "gitRoot")]
     pub(crate) git_root: Option<String>,
-    #[serde(default, rename = "codexHome")]
-    pub(crate) codex_home: Option<String>,
-    #[serde(default, rename = "codexArgs")]
-    pub(crate) codex_args: Option<String>,
     #[serde(default, rename = "launchScript")]
     pub(crate) launch_script: Option<String>,
     #[serde(default, rename = "launchScripts")]
@@ -533,6 +529,8 @@ pub(crate) struct AppSettings {
         rename = "commitMessagePrompt"
     )]
     pub(crate) commit_message_prompt: String,
+    #[serde(default, rename = "commitMessageModelId")]
+    pub(crate) commit_message_model_id: Option<String>,
     #[serde(
         default = "default_system_notifications_enabled",
         rename = "systemNotificationsEnabled"
@@ -544,11 +542,6 @@ pub(crate) struct AppSettings {
     )]
     pub(crate) subagent_system_notifications_enabled: bool,
     #[serde(
-        default = "default_experimental_collab_enabled",
-        rename = "experimentalCollabEnabled"
-    )]
-    pub(crate) experimental_collab_enabled: bool,
-    #[serde(
         default = "default_collaboration_modes_enabled",
         rename = "collaborationModesEnabled"
     )]
@@ -559,6 +552,16 @@ pub(crate) struct AppSettings {
         alias = "experimentalSteerEnabled"
     )]
     pub(crate) steer_enabled: bool,
+    #[serde(
+        default = "default_follow_up_message_behavior",
+        rename = "followUpMessageBehavior"
+    )]
+    pub(crate) follow_up_message_behavior: String,
+    #[serde(
+        default = "default_composer_follow_up_hint_enabled",
+        rename = "composerFollowUpHintEnabled"
+    )]
+    pub(crate) composer_follow_up_hint_enabled: bool,
     #[serde(
         default = "default_pause_queued_messages_when_response_required",
         rename = "pauseQueuedMessagesWhenResponseRequired"
@@ -900,15 +903,19 @@ Changes:\n{diff}"
         .to_string()
 }
 
-fn default_experimental_collab_enabled() -> bool {
-    false
-}
-
 fn default_collaboration_modes_enabled() -> bool {
     true
 }
 
 fn default_steer_enabled() -> bool {
+    true
+}
+
+fn default_follow_up_message_behavior() -> String {
+    "queue".to_string()
+}
+
+fn default_composer_follow_up_hint_enabled() -> bool {
     true
 }
 
@@ -1149,9 +1156,11 @@ impl Default for AppSettings {
             preload_git_diffs: default_preload_git_diffs(),
             git_diff_ignore_whitespace_changes: default_git_diff_ignore_whitespace_changes(),
             commit_message_prompt: default_commit_message_prompt(),
-            experimental_collab_enabled: false,
+            commit_message_model_id: None,
             collaboration_modes_enabled: true,
             steer_enabled: true,
+            follow_up_message_behavior: default_follow_up_message_behavior(),
+            composer_follow_up_hint_enabled: default_composer_follow_up_hint_enabled(),
             pause_queued_messages_when_response_required:
                 default_pause_queued_messages_when_response_required(),
             unified_exec_enabled: true,
@@ -1313,6 +1322,8 @@ mod tests {
         assert!(settings.commit_message_prompt.contains("{diff}"));
         assert!(settings.collaboration_modes_enabled);
         assert!(settings.steer_enabled);
+        assert_eq!(settings.follow_up_message_behavior, "queue");
+        assert!(settings.composer_follow_up_hint_enabled);
         assert!(settings.pause_queued_messages_when_response_required);
         assert!(settings.unified_exec_enabled);
         assert!(!settings.experimental_apps_enabled);
@@ -1371,7 +1382,7 @@ mod tests {
     #[test]
     fn workspace_entry_defaults_from_minimal_json() {
         let entry: WorkspaceEntry =
-            serde_json::from_str(r#"{"id":"1","name":"Test","path":"/tmp","codexBin":null}"#)
+            serde_json::from_str(r#"{"id":"1","name":"Test","path":"/tmp"}"#)
                 .expect("workspace deserialize");
         assert!(matches!(entry.kind, WorkspaceKind::Main));
         assert!(entry.parent_id.is_none());

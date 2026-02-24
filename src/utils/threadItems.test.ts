@@ -458,6 +458,20 @@ describe("threadItems", () => {
     }
   });
 
+  it("defaults web search items to completed status", () => {
+    const item = buildConversationItem({
+      type: "webSearch",
+      id: "web-1",
+      query: "codex monitor",
+    });
+    expect(item).not.toBeNull();
+    if (item && item.kind === "tool") {
+      expect(item.toolType).toBe("webSearch");
+      expect(item.status).toBe("completed");
+      expect(item.detail).toBe("codex monitor");
+    }
+  });
+
   it("merges thread items preferring non-empty remote tool output", () => {
     const remote: ConversationItem = {
       id: "tool-2",
@@ -508,6 +522,33 @@ describe("threadItems", () => {
     expect(merged[0].kind).toBe("tool");
     if (merged[0].kind === "tool") {
       expect(merged[0].output).toBe("streamed output");
+      expect(merged[0].status).toBe("completed");
+    }
+  });
+
+  it("keeps local tool status when remote status is empty", () => {
+    const remote: ConversationItem = {
+      id: "tool-remote-status",
+      kind: "tool",
+      toolType: "webSearch",
+      title: "Web search",
+      detail: "query",
+      status: "",
+      output: "",
+    };
+    const local: ConversationItem = {
+      id: "tool-remote-status",
+      kind: "tool",
+      toolType: "webSearch",
+      title: "Web search",
+      detail: "query",
+      status: "completed",
+      output: "",
+    };
+    const merged = mergeThreadItems([remote], [local]);
+    expect(merged).toHaveLength(1);
+    expect(merged[0].kind).toBe("tool");
+    if (merged[0].kind === "tool") {
       expect(merged[0].status).toBe("completed");
     }
   });
@@ -641,8 +682,62 @@ describe("threadItems", () => {
     if (item && item.kind === "tool") {
       expect(item.title).toBe("Collab: handoff");
       expect(item.detail).toContain("From thread-a");
-      expect(item.detail).toContain("thread-b, thread-c");
+      expect(item.detail).toContain("thread-b");
+      expect(item.detail).toContain("thread-c");
       expect(item.output).toBe("Coordinate work\n\nagent-1: running");
+    }
+  });
+
+  it("captures rich collab metadata from receiver_agents and agent_statuses", () => {
+    const item = buildConversationItem({
+      type: "collabToolCall",
+      id: "collab-rich-1",
+      tool: "wait",
+      status: "completed",
+      sender_thread_id: "thread-parent",
+      receiver_agents: [
+        {
+          thread_id: "thread-child-1",
+          agent_nickname: "Robie",
+          agent_role: "explorer",
+        },
+      ],
+      agent_statuses: [
+        {
+          thread_id: "thread-child-1",
+          status: "completed",
+          agent_nickname: "Robie",
+          agent_role: "explorer",
+        },
+      ],
+      prompt: "Wait for workers",
+    });
+
+    expect(item).not.toBeNull();
+    if (item && item.kind === "tool") {
+      expect(item.collabSender).toEqual({ threadId: "thread-parent" });
+      expect(item.collabReceiver).toEqual({
+        threadId: "thread-child-1",
+        nickname: "Robie",
+        role: "explorer",
+      });
+      expect(item.collabReceivers).toEqual([
+        {
+          threadId: "thread-child-1",
+          nickname: "Robie",
+          role: "explorer",
+        },
+      ]);
+      expect(item.collabStatuses).toEqual([
+        {
+          threadId: "thread-child-1",
+          nickname: "Robie",
+          role: "explorer",
+          status: "completed",
+        },
+      ]);
+      expect(item.detail).toContain("Robie [explorer]");
+      expect(item.output).toContain("Robie [explorer]: completed");
     }
   });
 

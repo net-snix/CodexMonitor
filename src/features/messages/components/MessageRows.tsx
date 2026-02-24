@@ -8,11 +8,14 @@ import Diff from "lucide-react/dist/esm/icons/diff";
 import FileDiff from "lucide-react/dist/esm/icons/file-diff";
 import FileText from "lucide-react/dist/esm/icons/file-text";
 import Image from "lucide-react/dist/esm/icons/image";
+import Quote from "lucide-react/dist/esm/icons/quote";
 import Search from "lucide-react/dist/esm/icons/search";
 import Terminal from "lucide-react/dist/esm/icons/terminal";
 import Users from "lucide-react/dist/esm/icons/users";
 import Wrench from "lucide-react/dist/esm/icons/wrench";
 import X from "lucide-react/dist/esm/icons/x";
+import { exportMarkdownFile } from "@services/tauri";
+import { pushErrorToast } from "@services/toasts";
 import type { ConversationItem } from "../../../types";
 import { languageFromPath } from "../../../utils/syntax";
 import { DiffBlock } from "../../git/components/DiffBlock";
@@ -54,6 +57,7 @@ type MessageRowProps = MarkdownFileLinkProps & {
   item: Extract<ConversationItem, { kind: "message" }>;
   isCopied: boolean;
   onCopy: (item: Extract<ConversationItem, { kind: "message" }>) => void;
+  onQuote?: (item: Extract<ConversationItem, { kind: "message" }>) => void;
   codeBlockCopyUseModifier?: boolean;
 };
 
@@ -260,7 +264,7 @@ function toolIconForSummary(
   if (label === "read") {
     return FileText;
   }
-  if (label === "searched") {
+  if (label === "searched" || label === "searching") {
     return Search;
   }
 
@@ -271,6 +275,19 @@ function toolIconForSummary(
   }
 
   return Wrench;
+}
+
+function buildPlanExportFileName(itemId: string) {
+  const normalized = itemId
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48);
+  if (!normalized) {
+    return "plan.md";
+  }
+  return normalized.startsWith("plan-") ? `${normalized}.md` : `plan-${normalized}.md`;
 }
 
 export const WorkingIndicator = memo(function WorkingIndicator({
@@ -345,6 +362,7 @@ export const MessageRow = memo(function MessageRow({
   item,
   isCopied,
   onCopy,
+  onQuote,
   codeBlockCopyUseModifier,
   showMessageFilePath,
   workspacePath,
@@ -398,6 +416,17 @@ export const MessageRow = memo(function MessageRow({
             activeIndex={lightboxIndex}
             onClose={() => setLightboxIndex(null)}
           />
+        )}
+        {onQuote && hasText && (
+          <button
+            type="button"
+            className="ghost message-quote-button"
+            onClick={() => onQuote(item)}
+            aria-label="Quote message"
+            title="Quote message"
+          >
+            <Quote size={14} aria-hidden />
+          </button>
         )}
         <button
           type="button"
@@ -531,6 +560,7 @@ export const ToolRow = memo(function ToolRow({
 }: ToolRowProps) {
   const isFileChange = item.toolType === "fileChange";
   const isCommand = item.toolType === "commandExecution";
+  const isPlan = item.toolType === "plan";
   const commandText = isCommand
     ? item.title.replace(/^Command:\s*/i, "").trim()
     : "";
@@ -562,6 +592,7 @@ export const ToolRow = memo(function ToolRow({
     typeof item.durationMs === "number" ? item.durationMs : null;
   const isLongRunning = commandDurationMs !== null && commandDurationMs >= 1200;
   const [showLiveOutput, setShowLiveOutput] = useState(false);
+  const [isExportingPlan, setIsExportingPlan] = useState(false);
 
   useEffect(() => {
     if (!isCommandRunning) {
@@ -586,6 +617,30 @@ export const ToolRow = memo(function ToolRow({
       onRequestAutoScroll?.();
     }
   }, [isCommandRunning, onRequestAutoScroll, showCommandOutput, showLiveOutput]);
+
+  const handlePlanExport = useCallback(
+    async (event: MouseEvent<HTMLButtonElement>) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const output = (summary.output ?? "").trim();
+      if (!output) {
+        return;
+      }
+      setIsExportingPlan(true);
+      try {
+        await exportMarkdownFile(output, buildPlanExportFileName(item.id));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Unable to export plan.";
+        pushErrorToast({
+          title: "Plan export failed",
+          message,
+        });
+      } finally {
+        setIsExportingPlan(false);
+      }
+    },
+    [item.id, summary.output],
+  );
 
   return (
     <div className={`tool-inline ${isExpanded ? "tool-inline-expanded" : ""}`}>
@@ -680,13 +735,25 @@ export const ToolRow = memo(function ToolRow({
           <Markdown
             value={summary.output}
             className="tool-inline-output markdown"
-            codeBlock
+            codeBlock={item.toolType !== "plan"}
             showFilePath={showMessageFilePath}
             workspacePath={workspacePath}
             onOpenFileLink={onOpenFileLink}
             onOpenFileLinkMenu={onOpenFileLinkMenu}
             onOpenThreadLink={onOpenThreadLink}
           />
+        )}
+        {showToolOutput && isPlan && (summary.output ?? "").trim() && (
+          <div className="tool-inline-actions">
+            <button
+              type="button"
+              className="ghost tool-inline-action"
+              onClick={handlePlanExport}
+              disabled={isExportingPlan}
+            >
+              {isExportingPlan ? "Exporting..." : "Export .md"}
+            </button>
+          </div>
         )}
       </div>
     </div>

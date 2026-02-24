@@ -66,8 +66,46 @@
   cursor: pointer;
 }
 
-.composer-queue-menu:hover {
+.composer-queue-menu-wrap {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.composer-queue-menu:hover,
+.composer-queue-menu.is-open {
   color: var(--text-stronger);
+}
+
+.composer-queue-item-popover {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 4px);
+  min-width: 110px;
+  padding: 4px;
+  z-index: 40;
+}
+
+.composer-followup-hint {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  border: 1px solid var(--border-muted);
+  background: var(--surface-card);
+}
+
+.composer-followup-title {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-fainter);
+}
+
+.composer-followup-copy {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-subtle);
 }
 
 .composer-context-actions {
@@ -907,6 +945,10 @@
   }
 
   .app.layout-phone .composer-context {
+    display: none;
+  }
+
+  .app.layout-phone .composer-followup-hint {
     display: none;
   }
 

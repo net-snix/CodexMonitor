@@ -4,12 +4,14 @@ type SettingsSection =
   | "projects"
   | "environments"
   | "display"
+  | "about"
   | "composer"
   | "dictation"
   | "shortcuts"
   | "open-apps"
   | "git"
-  | "server";
+  | "server"
+  | "agents";
 
 export type CodexSection = SettingsSection | "codex" | "features";
 

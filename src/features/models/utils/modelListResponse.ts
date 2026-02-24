@@ -81,10 +81,13 @@ export function parseModelListResponse(response: unknown): ModelOption[] {
         return null;
       }
       const record = item as Record<string, unknown>;
+      const modelSlug = String(record.model ?? record.id ?? "");
+      const rawDisplayName = String(record.displayName || record.display_name || "");
+      const displayName = rawDisplayName.trim().length > 0 ? rawDisplayName : modelSlug;
       return {
         id: String(record.id ?? record.model ?? ""),
-        model: String(record.model ?? record.id ?? ""),
-        displayName: String(record.displayName ?? record.display_name ?? record.model ?? ""),
+        model: modelSlug,
+        displayName,
         description: String(record.description ?? ""),
         supportedReasoningEfforts: parseReasoningEfforts(record),
         defaultReasoningEffort: normalizeEffortValue(

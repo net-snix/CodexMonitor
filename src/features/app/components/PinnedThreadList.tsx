@@ -1,11 +1,8 @@
-import type { CSSProperties, MouseEvent } from "react";
+import type { MouseEvent } from "react";
 
 import type { ThreadSummary } from "../../../types";
-
-type ThreadStatusMap = Record<
-  string,
-  { isProcessing: boolean; hasUnread: boolean; isReviewing: boolean }
->;
+import type { ThreadStatusById } from "../../../utils/threadStatus";
+import { ThreadRow } from "./ThreadRow";
 
 type PinnedThreadRow = {
   thread: ThreadSummary;
@@ -17,9 +14,11 @@ type PinnedThreadListProps = {
   rows: PinnedThreadRow[];
   activeWorkspaceId: string | null;
   activeThreadId: string | null;
-  threadStatusById: ThreadStatusMap;
+  threadStatusById: ThreadStatusById;
   pendingUserInputKeys?: Set<string>;
+  getWorkspaceLabel?: (workspaceId: string) => string | null;
   getThreadTime: (thread: ThreadSummary) => string | null;
+  getThreadArgsBadge?: (workspaceId: string, threadId: string) => string | null;
   isThreadPinned: (workspaceId: string, threadId: string) => boolean;
   onSelectThread: (workspaceId: string, threadId: string) => void;
   onShowThreadMenu: (
@@ -36,7 +35,9 @@ export function PinnedThreadList({
   activeThreadId,
   threadStatusById,
   pendingUserInputKeys,
+  getWorkspaceLabel,
   getThreadTime,
+  getThreadArgsBadge,
   isThreadPinned,
   onSelectThread,
   onShowThreadMenu,
@@ -44,63 +45,24 @@ export function PinnedThreadList({
   return (
     <div className="thread-list pinned-thread-list">
       {rows.map(({ thread, depth, workspaceId }) => {
-        const relativeTime = getThreadTime(thread);
-        const indentStyle =
-          depth > 0
-            ? ({ "--thread-indent": `${depth * 14}px` } as CSSProperties)
-            : undefined;
-        const status = threadStatusById[thread.id];
-        const hasPendingUserInput = Boolean(
-          pendingUserInputKeys?.has(`${workspaceId}:${thread.id}`),
-        );
-        const statusClass = hasPendingUserInput
-          ? "unread"
-          : status?.isReviewing
-          ? "reviewing"
-          : status?.isProcessing
-            ? "processing"
-            : status?.hasUnread
-              ? "unread"
-              : "ready";
-        const canPin = depth === 0;
-        const isPinned = canPin && isThreadPinned(workspaceId, thread.id);
-
         return (
-          <div
+          <ThreadRow
             key={`${workspaceId}:${thread.id}`}
-            className={`thread-row ${
-              workspaceId === activeWorkspaceId && thread.id === activeThreadId
-                ? "active"
-                : ""
-            }`}
-            style={indentStyle}
-            onClick={() => onSelectThread(workspaceId, thread.id)}
-            onContextMenu={(event) =>
-              onShowThreadMenu(event, workspaceId, thread.id, canPin)
-            }
-            role="button"
-            tabIndex={0}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" || event.key === " ") {
-                event.preventDefault();
-                onSelectThread(workspaceId, thread.id);
-              }
-            }}
-          >
-            <span className={`thread-status ${statusClass}`} aria-hidden />
-            {isPinned && (
-              <span className="thread-pin-icon" aria-label="Pinned">
-                📌
-              </span>
-            )}
-            <span className="thread-name">{thread.name}</span>
-            <div className="thread-meta">
-              {relativeTime && <span className="thread-time">{relativeTime}</span>}
-              <div className="thread-menu">
-                <div className="thread-menu-trigger" aria-hidden="true" />
-              </div>
-            </div>
-          </div>
+            thread={thread}
+            depth={depth}
+            workspaceId={workspaceId}
+            indentUnit={14}
+            activeWorkspaceId={activeWorkspaceId}
+            activeThreadId={activeThreadId}
+            threadStatusById={threadStatusById}
+            pendingUserInputKeys={pendingUserInputKeys}
+            workspaceLabel={getWorkspaceLabel?.(workspaceId) ?? null}
+            getThreadTime={getThreadTime}
+            getThreadArgsBadge={getThreadArgsBadge}
+            isThreadPinned={isThreadPinned}
+            onSelectThread={onSelectThread}
+            onShowThreadMenu={onShowThreadMenu}
+          />
         );
       })}
     </div>

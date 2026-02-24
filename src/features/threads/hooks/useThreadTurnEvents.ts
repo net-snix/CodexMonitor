@@ -1,6 +1,6 @@
 import { useCallback, useRef } from "react";
 import type { Dispatch, MutableRefObject } from "react";
-import type { TurnPlan } from "@/types";
+import type { RateLimitSnapshot, TurnPlan } from "@/types";
 import { interruptTurn as interruptTurnService } from "@services/tauri";
 import { getThreadTimestamp } from "@utils/threadItems";
 import {
@@ -14,6 +14,7 @@ import type { ThreadAction } from "./useThreadsReducer";
 type UseThreadTurnEventsOptions = {
   dispatch: Dispatch<ThreadAction>;
   planByThreadRef: MutableRefObject<Record<string, TurnPlan | null>>;
+  getCurrentRateLimits?: (workspaceId: string) => RateLimitSnapshot | null;
   getCustomName: (workspaceId: string, threadId: string) => string | undefined;
   isThreadHidden: (workspaceId: string, threadId: string) => boolean;
   markProcessing: (threadId: string, isProcessing: boolean) => void;
@@ -26,9 +27,21 @@ type UseThreadTurnEventsOptions = {
   recordThreadActivity: (workspaceId: string, threadId: string, timestamp?: number) => void;
 };
 
+function normalizeThreadStatusType(status: Record<string, unknown>): string {
+  const typeRaw = status.type ?? status.statusType ?? status.status_type;
+  if (typeof typeRaw !== "string") {
+    return "";
+  }
+  return typeRaw
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_-]/g, "");
+}
+
 export function useThreadTurnEvents({
   dispatch,
   planByThreadRef,
+  getCurrentRateLimits,
   getCustomName,
   isThreadHidden,
   markProcessing,
@@ -149,6 +162,44 @@ export function useThreadTurnEvents({
     [dispatch, getCustomName],
   );
 
+  const onThreadArchived = useCallback(
+    (workspaceId: string, threadId: string) => {
+      if (!threadId) {
+        return;
+      }
+      dispatch({ type: "removeThread", workspaceId, threadId });
+    },
+    [dispatch],
+  );
+
+  const onThreadUnarchived = useCallback(
+    (workspaceId: string, threadId: string) => {
+      if (!threadId) {
+        return;
+      }
+      dispatch({ type: "ensureThread", workspaceId, threadId });
+      const customName = getCustomName(workspaceId, threadId);
+      if (customName) {
+        dispatch({
+          type: "setThreadName",
+          workspaceId,
+          threadId,
+          name: customName,
+        });
+      }
+      const timestamp = Date.now();
+      dispatch({
+        type: "setThreadTimestamp",
+        workspaceId,
+        threadId,
+        timestamp,
+      });
+      recordThreadActivity(workspaceId, threadId, timestamp);
+      safeMessageActivity();
+    },
+    [dispatch, getCustomName, recordThreadActivity, safeMessageActivity],
+  );
+
   const onTurnStarted = useCallback(
     (workspaceId: string, threadId: string, turnId: string) => {
       dispatch({
@@ -200,6 +251,31 @@ export function useThreadTurnEvents({
     ],
   );
 
+  const onThreadStatusChanged = useCallback(
+    (_workspaceId: string, threadId: string, status: Record<string, unknown>) => {
+      const statusType = normalizeThreadStatusType(status);
+      if (!statusType) {
+        return;
+      }
+      if (statusType === "active") {
+        markProcessing(threadId, true);
+        return;
+      }
+      if (
+        statusType === "idle" ||
+        statusType === "notloaded" ||
+        statusType === "systemerror"
+      ) {
+        markProcessing(threadId, false);
+        hasOptimisticActiveTurnByThreadRef.current[threadId] = false;
+        immediateActiveTurnIdByThreadRef.current[threadId] = null;
+        setActiveTurnId(threadId, null);
+        pendingInterruptsRef.current.delete(threadId);
+      }
+    },
+    [markProcessing, pendingInterruptsRef, setActiveTurnId],
+  );
+
   const onTurnPlanUpdated = useCallback(
     (
       workspaceId: string,
@@ -244,13 +320,14 @@ export function useThreadTurnEvents({
 
   const onAccountRateLimitsUpdated = useCallback(
     (workspaceId: string, rateLimits: Record<string, unknown>) => {
+      const previousRateLimits = getCurrentRateLimits?.(workspaceId) ?? null;
       dispatch({
         type: "setRateLimits",
         workspaceId,
-        rateLimits: normalizeRateLimits(rateLimits),
+        rateLimits: normalizeRateLimits(rateLimits, previousRateLimits),
       });
     },
-    [dispatch],
+    [dispatch, getCurrentRateLimits],
   );
 
   const onTurnError = useCallback(
@@ -293,8 +370,11 @@ export function useThreadTurnEvents({
   return {
     onThreadStarted,
     onThreadNameUpdated,
+    onThreadArchived,
+    onThreadUnarchived,
     onTurnStarted,
     onTurnCompleted,
+    onThreadStatusChanged,
     onTurnPlanUpdated,
     onTurnDiffUpdated,
     onThreadTokenUsageUpdated,

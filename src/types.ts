@@ -2,9 +2,8 @@ export type WorkspaceSettings = {
   sidebarCollapsed: boolean;
   sortOrder?: number | null;
   groupId?: string | null;
+  cloneSourceWorkspaceId?: string | null;
   gitRoot?: string | null;
-  codexHome?: string | null;
-  codexArgs?: string | null;
   launchScript?: string | null;
   launchScripts?: LaunchScriptEntry[] | null;
   worktreeSetupScript?: string | null;
@@ -52,7 +51,6 @@ export type WorkspaceInfo = {
   name: string;
   path: string;
   connected: boolean;
-  codex_bin?: string | null;
   kind?: WorkspaceKind;
   parentId?: string | null;
   worktree?: WorktreeInfo | null;
@@ -68,6 +66,16 @@ export type Message = {
   id: string;
   role: "user" | "assistant";
   text: string;
+};
+
+export type CollabAgentRef = {
+  threadId: string;
+  nickname?: string;
+  role?: string;
+};
+
+export type CollabAgentStatus = CollabAgentRef & {
+  status: string;
 };
 
 export type ConversationItem =
@@ -97,15 +105,26 @@ export type ConversationItem =
       output?: string;
       durationMs?: number | null;
       changes?: { path: string; kind?: string; diff?: string }[];
+      collabSender?: CollabAgentRef;
+      collabReceiver?: CollabAgentRef;
+      collabReceivers?: CollabAgentRef[];
+      collabStatuses?: CollabAgentStatus[];
     };
 
 export type ThreadSummary = {
   id: string;
   name: string;
   updatedAt: number;
+  createdAt?: number;
+  modelId?: string | null;
+  effort?: string | null;
 };
 
 export type ThreadListSortKey = "created_at" | "updated_at";
+export type ThreadListOrganizeMode =
+  | "by_project"
+  | "by_project_activity"
+  | "threads_only";
 
 export type ReviewTarget =
   | { type: "uncommittedChanges" }
@@ -154,7 +173,11 @@ export type RemoteBackendTarget = {
 };
 export type ThemePreference = "system" | "light" | "dark" | "dim" | "xp";
 export type PersonalityPreference = "friendly" | "pragmatic";
-
+export type FollowUpMessageBehavior = "queue" | "steer";
+export type ComposerSendIntent = "default" | "queue" | "steer";
+export type SendMessageResult = {
+  status: "sent" | "blocked" | "steer_failed";
+};
 
 export type ComposerEditorPreset = "default" | "helpful" | "smart";
 
@@ -226,9 +249,11 @@ export type AppSettings = {
   preloadGitDiffs: boolean;
   gitDiffIgnoreWhitespaceChanges: boolean;
   commitMessagePrompt: string;
-  experimentalCollabEnabled: boolean;
+  commitMessageModelId: string | null;
   collaborationModesEnabled: boolean;
   steerEnabled: boolean;
+  followUpMessageBehavior: FollowUpMessageBehavior;
+  composerFollowUpHintEnabled: boolean;
   pauseQueuedMessagesWhenResponseRequired: boolean;
   unifiedExecEnabled: boolean;
   experimentalAppsEnabled: boolean;

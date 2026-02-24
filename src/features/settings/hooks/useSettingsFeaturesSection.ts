@@ -10,16 +10,18 @@ import {
 type UseSettingsFeaturesSectionArgs = {
   appSettings: AppSettings;
   featureWorkspaceId: string | null;
-  hasCodexHomeOverrides: boolean;
   onUpdateAppSettings: (next: AppSettings) => Promise<void>;
 };
 
-const HIDDEN_DYNAMIC_FEATURE_KEYS = new Set<string>(["personality"]);
+const HIDDEN_DYNAMIC_FEATURE_KEYS = new Set<string>([
+  "personality",
+  "collab",
+  "steer",
+]);
 
 export type SettingsFeaturesSectionProps = {
   appSettings: AppSettings;
   hasFeatureWorkspace: boolean;
-  hasCodexHomeOverrides: boolean;
   openConfigError: string | null;
   featureError: string | null;
   featuresLoading: boolean;
@@ -120,9 +122,6 @@ function mapFeatureToAppSettings(
   featureKey: string,
   enabled: boolean,
 ): AppSettings | null {
-  if (featureKey === "collab") {
-    return { ...appSettings, experimentalCollabEnabled: enabled };
-  }
   if (featureKey === "apps") {
     return { ...appSettings, experimentalAppsEnabled: enabled };
   }
@@ -141,7 +140,6 @@ function mapFeatureToAppSettings(
 export const useSettingsFeaturesSection = ({
   appSettings,
   featureWorkspaceId,
-  hasCodexHomeOverrides,
   onUpdateAppSettings,
 }: UseSettingsFeaturesSectionArgs): SettingsFeaturesSectionProps => {
   const [openConfigError, setOpenConfigError] = useState<string | null>(null);
@@ -239,7 +237,8 @@ export const useSettingsFeaturesSection = ({
     () =>
       features.filter(
         (feature) =>
-          feature.stage === "beta" || feature.stage === "under_development",
+          (feature.stage === "beta" || feature.stage === "under_development") &&
+          !HIDDEN_DYNAMIC_FEATURE_KEYS.has(feature.name),
       ),
     [features],
   );
@@ -286,7 +285,6 @@ export const useSettingsFeaturesSection = ({
   return {
     appSettings,
     hasFeatureWorkspace: featureWorkspaceId != null,
-    hasCodexHomeOverrides,
     openConfigError,
     featureError,
     featuresLoading,

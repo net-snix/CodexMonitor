@@ -1,15 +1,11 @@
 import Layers from "lucide-react/dist/esm/icons/layers";
-import type { MouseEvent } from "react";
+import type { MouseEvent, ReactNode } from "react";
 
 import type { ThreadSummary, WorkspaceInfo } from "../../../types";
+import type { ThreadStatusById } from "../../../utils/threadStatus";
 import { ThreadList } from "./ThreadList";
 import { ThreadLoading } from "./ThreadLoading";
 import { WorktreeCard } from "./WorktreeCard";
-
-type ThreadStatusMap = Record<
-  string,
-  { isProcessing: boolean; hasUnread: boolean; isReviewing: boolean }
->;
 
 type ThreadRowsResult = {
   pinnedRows: Array<{ thread: ThreadSummary; depth: number }>;
@@ -22,7 +18,7 @@ type WorktreeSectionProps = {
   worktrees: WorkspaceInfo[];
   deletingWorktreeIds: Set<string>;
   threadsByWorkspace: Record<string, ThreadSummary[]>;
-  threadStatusById: ThreadStatusMap;
+  threadStatusById: ThreadStatusById;
   threadListLoadingByWorkspace: Record<string, boolean>;
   threadListPagingByWorkspace: Record<string, boolean>;
   threadListCursorByWorkspace: Record<string, string | null>;
@@ -38,6 +34,7 @@ type WorktreeSectionProps = {
     pinVersion?: number,
   ) => ThreadRowsResult;
   getThreadTime: (thread: ThreadSummary) => string | null;
+  getThreadArgsBadge?: (workspaceId: string, threadId: string) => string | null;
   isThreadPinned: (workspaceId: string, threadId: string) => boolean;
   getPinTimestamp: (workspaceId: string, threadId: string) => number | null;
   pinnedThreadsVersion: number;
@@ -54,6 +51,9 @@ type WorktreeSectionProps = {
   onShowWorktreeMenu: (event: MouseEvent, worktree: WorkspaceInfo) => void;
   onToggleExpanded: (workspaceId: string) => void;
   onLoadOlderThreads: (workspaceId: string) => void;
+  sectionLabel?: string;
+  sectionIcon?: ReactNode;
+  className?: string;
 };
 
 export function WorktreeSection({
@@ -70,6 +70,7 @@ export function WorktreeSection({
   pendingUserInputKeys,
   getThreadRows,
   getThreadTime,
+  getThreadArgsBadge,
   isThreadPinned,
   getPinTimestamp,
   pinnedThreadsVersion,
@@ -81,16 +82,19 @@ export function WorktreeSection({
   onShowWorktreeMenu,
   onToggleExpanded,
   onLoadOlderThreads,
+  sectionLabel = "Worktrees",
+  sectionIcon,
+  className,
 }: WorktreeSectionProps) {
   if (!worktrees.length) {
     return null;
   }
 
   return (
-    <div className="worktree-section">
+    <div className={`worktree-section${className ? ` ${className}` : ""}`}>
       <div className="worktree-header">
-        <Layers className="worktree-header-icon" aria-hidden />
-        Worktrees
+        {sectionIcon ?? <Layers className="worktree-header-icon" aria-hidden />}
+        {sectionLabel}
       </div>
       <div className="worktree-list">
         {worktrees.map((worktree) => {
@@ -144,6 +148,7 @@ export function WorktreeSection({
                   threadStatusById={threadStatusById}
                   pendingUserInputKeys={pendingUserInputKeys}
                   getThreadTime={getThreadTime}
+                  getThreadArgsBadge={getThreadArgsBadge}
                   isThreadPinned={isThreadPinned}
                   onToggleExpanded={onToggleExpanded}
                   onLoadOlderThreads={onLoadOlderThreads}

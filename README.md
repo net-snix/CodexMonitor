@@ -33,7 +33,8 @@ Strikethrough means the item has landed in origin.
 
 ### Composer & Agent Controls
 
-- Compose with queueing plus image attachments (picker, drag/drop, paste).
+- Compose with image attachments (picker, drag/drop, paste) and configurable follow-up behavior (`Queue` vs `Steer` while a run is active).
+- Use `Shift+Cmd+Enter` (macOS) or `Shift+Ctrl+Enter` (Windows/Linux) to send the opposite follow-up action for a single message.
 - Autocomplete for skills (`$`), prompts (`/prompts:`), reviews (`/review`), and file paths (`@`).
 - Model picker, collaboration modes (when enabled), reasoning effort, access mode, and context usage ring.
 - Dictation with hold-to-talk shortcuts and live waveform (Whisper).
@@ -117,6 +118,41 @@ Notes:
 - The desktop daemon must stay running while iOS is connected.
 - If the test fails, confirm both devices are online in Tailscale and that host/token match desktop settings.
 
+### Headless Daemon Management (No Desktop UI)
+
+Use the standalone daemon control CLI when you want iOS remote mode without keeping the desktop app open.
+
+Build binaries:
+
+```bash
+cd src-tauri
+cargo build --bin codex_monitor_daemon --bin codex_monitor_daemonctl
+```
+
+Examples:
+
+```bash
+# Show current daemon status
+./target/debug/codex_monitor_daemonctl status
+
+# Start daemon using host/token from settings.json
+./target/debug/codex_monitor_daemonctl start
+
+# Stop daemon
+./target/debug/codex_monitor_daemonctl stop
+
+# Print equivalent daemon start command
+./target/debug/codex_monitor_daemonctl command-preview
+```
+
+Useful overrides:
+
+- `--data-dir <path>`: app data dir containing `settings.json` / `workspaces.json`
+- `--listen <addr>`: bind address override
+- `--token <token>`: token override
+- `--daemon-path <path>`: explicit `codex-monitor-daemon` binary path
+- `--json`: machine-readable output
+
 ### iOS Prerequisites
 
 - Xcode + Command Line Tools installed.
@@ -129,8 +165,10 @@ rustup target add x86_64-apple-ios
 ```
 
 - Apple signing configured (development team).
-  - Set `bundle.iOS.developmentTeam` in `src-tauri/tauri.ios.conf.json` (preferred), or
+  - Set `bundle.iOS.developmentTeam` and `identifier` in `src-tauri/tauri.ios.local.conf.json` (preferred for local machine setup), or
+  - set values in `src-tauri/tauri.ios.conf.json`, or
   - pass `--team <TEAM_ID>` to the device script.
+  - `build_run_ios*.sh` and `release_testflight_ios.sh` automatically merge `src-tauri/tauri.ios.local.conf.json` when present.
 
 ### Run on iOS Simulator
 
@@ -267,8 +305,8 @@ src-tauri/
 ## Notes
 
 - Workspaces persist to `workspaces.json` under the app data directory.
-- App settings persist to `settings.json` under the app data directory (theme, backend mode/provider, remote endpoints/tokens, Codex path, default access mode, UI scale).
-- Feature settings are supported in the UI and synced to `$CODEX_HOME/config.toml` (or `~/.codex/config.toml`) on load/save. Stable: Collaboration modes (`features.collaboration_modes`), personality (`personality`), Steer mode (`features.steer`), and Background terminal (`features.unified_exec`). Experimental: Collab mode (`features.collab`) and Apps (`features.apps`).
+- App settings persist to `settings.json` under the app data directory (theme, backend mode/provider, remote endpoints/tokens, Codex path, default access mode, UI scale, follow-up message behavior).
+- Feature settings are supported in the UI and synced to `$CODEX_HOME/config.toml` (or `~/.codex/config.toml`) on load/save. Stable: Collaboration modes (`features.collaboration_modes`), personality (`personality`), and Background terminal (`features.unified_exec`). Experimental: Apps (`features.apps`). Steering capability still follows Codex `features.steer`, but follow-up default behavior is controlled in Settings → Composer.
 - On launch and on window focus, the app reconnects and refreshes thread lists for each workspace.
 - Threads are restored by filtering `thread/list` results using the workspace `cwd`.
 - Selecting a thread always calls `thread/resume` to refresh messages from disk.
@@ -286,7 +324,7 @@ src-tauri/
 Frontend calls live in `src/services/tauri.ts` and map to commands in `src-tauri/src/lib.rs`. The current surface includes:
 
 - Settings/config/files: `get_app_settings`, `update_app_settings`, `get_codex_config_path`, `get_config_model`, `file_read`, `file_write`, `codex_doctor`, `menu_set_accelerators`.
-- Workspaces/worktrees: `list_workspaces`, `is_workspace_path_dir`, `add_workspace`, `add_clone`, `add_worktree`, `worktree_setup_status`, `worktree_setup_mark_ran`, `rename_worktree`, `rename_worktree_upstream`, `apply_worktree_changes`, `update_workspace_settings`, `update_workspace_codex_bin`, `remove_workspace`, `remove_worktree`, `connect_workspace`, `list_workspace_files`, `read_workspace_file`, `open_workspace_in`, `get_open_app_icon`.
+- Workspaces/worktrees: `list_workspaces`, `is_workspace_path_dir`, `add_workspace`, `add_clone`, `add_worktree`, `worktree_setup_status`, `worktree_setup_mark_ran`, `rename_worktree`, `rename_worktree_upstream`, `apply_worktree_changes`, `update_workspace_settings`, `remove_workspace`, `remove_worktree`, `connect_workspace`, `list_workspace_files`, `read_workspace_file`, `open_workspace_in`, `get_open_app_icon`.
 - Threads/turns/reviews: `start_thread`, `fork_thread`, `compact_thread`, `list_threads`, `resume_thread`, `archive_thread`, `set_thread_name`, `send_user_message`, `turn_interrupt`, `respond_to_server_request`, `start_review`, `remember_approval_rule`, `get_commit_message_prompt`, `generate_commit_message`, `generate_run_metadata`.
 - Account/models/collaboration: `model_list`, `account_rate_limits`, `account_read`, `skills_list`, `apps_list`, `collaboration_mode_list`, `codex_login`, `codex_login_cancel`, `list_mcp_server_status`.
 - Git/GitHub: `get_git_status`, `list_git_roots`, `get_git_diffs`, `get_git_log`, `get_git_commit_diff`, `get_git_remote`, `stage_git_file`, `stage_git_all`, `unstage_git_file`, `revert_git_file`, `revert_git_all`, `commit_git`, `push_git`, `pull_git`, `fetch_git`, `sync_git`, `list_git_branches`, `checkout_git_branch`, `create_git_branch`, `get_github_issues`, `get_github_pull_requests`, `get_github_pull_request_diff`, `get_github_pull_request_comments`.
