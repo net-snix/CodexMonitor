@@ -4,8 +4,6 @@ import { useAgentResponseRequiredNotifications } from "../../notifications/hooks
 
 type Params = {
   systemNotificationsEnabled: boolean;
-  subagentSystemNotificationsEnabled: boolean;
-  isSubagentThread?: (workspaceId: string, threadId: string) => boolean;
   approvals: ApprovalRequest[];
   userInputRequests: RequestUserInputRequest[];
   getWorkspaceName?: (workspaceId: string) => string | undefined;
@@ -14,8 +12,6 @@ type Params = {
 
 export function useResponseRequiredNotificationsController({
   systemNotificationsEnabled,
-  subagentSystemNotificationsEnabled,
-  isSubagentThread,
   approvals,
   userInputRequests,
   getWorkspaceName,
@@ -25,8 +21,6 @@ export function useResponseRequiredNotificationsController({
 
   useAgentResponseRequiredNotifications({
     enabled: systemNotificationsEnabled,
-    subagentNotificationsEnabled: subagentSystemNotificationsEnabled,
-    isSubagentThread,
     isWindowFocused,
     approvals,
     userInputRequests,
@@ -34,3 +28,4 @@ export function useResponseRequiredNotificationsController({
     onDebug,
   });
 }
+

@@ -12,19 +12,15 @@ export function useLayoutController({
   toggleTerminalShortcut,
 }: {
   activeWorkspaceId: string | null;
-  setActiveTab: (tab: "home" | "projects" | "codex" | "git" | "log") => void;
+  setActiveTab: (tab: "projects" | "codex" | "git" | "log") => void;
   setDebugOpen: (value: boolean | ((prev: boolean) => boolean)) => void;
   toggleDebugPanelShortcut: string | null;
   toggleTerminalShortcut: string | null;
 }) {
   const {
-    appRef,
-    isResizing,
     sidebarWidth,
     rightPanelWidth,
-    chatDiffSplitPositionPercent,
     onSidebarResizeStart,
-    onChatDiffSplitPositionResizeStart,
     onRightPanelResizeStart,
     planPanelHeight,
     onPlanPanelResizeStart,
@@ -69,20 +65,16 @@ export function useLayoutController({
   });
 
   return {
-    appRef,
-    isResizing,
     layoutMode,
     isCompact,
     isTablet,
     isPhone,
     sidebarWidth,
     rightPanelWidth,
-    chatDiffSplitPositionPercent,
     planPanelHeight,
     terminalPanelHeight,
     debugPanelHeight,
     onSidebarResizeStart,
-    onChatDiffSplitPositionResizeStart,
     onRightPanelResizeStart,
     onPlanPanelResizeStart,
     onTerminalPanelResizeStart,

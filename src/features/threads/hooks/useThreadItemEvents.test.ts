@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { buildConversationItem } from "@utils/threadItems";
+import { buildConversationItem } from "../../../utils/threadItems";
 import { useThreadItemEvents } from "./useThreadItemEvents";
 
-vi.mock("@utils/threadItems", () => ({
+vi.mock("../../../utils/threadItems", () => ({
   buildConversationItem: vi.fn(),
 }));
 
@@ -13,7 +13,6 @@ type ItemPayload = Record<string, unknown>;
 type SetupOverrides = {
   activeThreadId?: string | null;
   getCustomName?: (workspaceId: string, threadId: string) => string | undefined;
-  onUserMessageCreated?: (workspaceId: string, threadId: string, text: string) => void;
   onReviewExited?: (workspaceId: string, threadId: string) => void;
 };
 
@@ -37,7 +36,6 @@ const makeOptions = (overrides: SetupOverrides = {}) => {
       safeMessageActivity,
       recordThreadActivity,
       applyCollabThreadLinks,
-      onUserMessageCreated: overrides.onUserMessageCreated,
       onReviewExited: overrides.onReviewExited,
     }),
   );
@@ -84,7 +82,7 @@ describe("useThreadItemEvents", () => {
     });
     expect(markProcessing).toHaveBeenCalledWith("thread-1", true);
     expect(markReviewing).toHaveBeenCalledWith("thread-1", true);
-    expect(applyCollabThreadLinks).toHaveBeenCalledWith("ws-1", "thread-1", item);
+    expect(applyCollabThreadLinks).toHaveBeenCalledWith("thread-1", item);
     expect(dispatch).toHaveBeenCalledWith({
       type: "upsertItem",
       workspaceId: "ws-1",
@@ -161,55 +159,6 @@ describe("useThreadItemEvents", () => {
         id: "compact-1",
         status: "completed",
       }),
-    );
-  });
-
-  it("adds lifecycle status for web search items", () => {
-    const { result } = makeOptions();
-    const item: ItemPayload = { type: "webSearch", id: "search-1", query: "codex monitor" };
-
-    act(() => {
-      result.current.onItemStarted("ws-1", "thread-1", item);
-    });
-    expect(buildConversationItem).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: "webSearch",
-        id: "search-1",
-        status: "inProgress",
-      }),
-    );
-
-    act(() => {
-      result.current.onItemCompleted("ws-1", "thread-1", item);
-    });
-    expect(buildConversationItem).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: "webSearch",
-        id: "search-1",
-        status: "completed",
-      }),
-    );
-  });
-
-  it("notifies when a user message is created", () => {
-    const onUserMessageCreated = vi.fn();
-    vi.mocked(buildConversationItem).mockReturnValue({
-      id: "item-2",
-      kind: "message",
-      role: "user",
-      text: "Hello from user",
-    });
-    const { result } = makeOptions({ onUserMessageCreated });
-    const item: ItemPayload = { type: "userMessage", id: "item-2" };
-
-    act(() => {
-      result.current.onItemCompleted("ws-1", "thread-1", item);
-    });
-
-    expect(onUserMessageCreated).toHaveBeenCalledWith(
-      "ws-1",
-      "thread-1",
-      "Hello from user",
     );
   });
 

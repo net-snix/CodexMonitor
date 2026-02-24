@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import type { WorkspaceInfo } from "@/types";
+import type { WorkspaceInfo } from "../../../types";
 import { useQueuedSend } from "./useQueuedSend";
 
 const workspace: WorkspaceInfo = {
@@ -16,16 +16,14 @@ const makeOptions = (
   overrides: Partial<Parameters<typeof useQueuedSend>[0]> = {},
 ) => ({
   activeThreadId: "thread-1",
-  activeTurnId: "turn-1",
   isProcessing: false,
   isReviewing: false,
   steerEnabled: false,
-  followUpMessageBehavior: "queue" as const,
   appsEnabled: true,
   activeWorkspace: workspace,
   connectWorkspace: vi.fn().mockResolvedValue(undefined),
   startThreadForWorkspace: vi.fn().mockResolvedValue("thread-1"),
-  sendUserMessage: vi.fn().mockResolvedValue({ status: "sent" }),
+  sendUserMessage: vi.fn().mockResolvedValue(undefined),
   sendUserMessageToThread: vi.fn().mockResolvedValue(undefined),
   startFork: vi.fn().mockResolvedValue(undefined),
   startReview: vi.fn().mockResolvedValue(undefined),
@@ -110,11 +108,7 @@ describe("useQueuedSend", () => {
   });
 
   it("sends immediately while processing when steer is enabled", async () => {
-    const options = makeOptions({
-      isProcessing: true,
-      steerEnabled: true,
-      followUpMessageBehavior: "steer",
-    });
+    const options = makeOptions({ isProcessing: true, steerEnabled: true });
     const { result } = renderHook((props) => useQueuedSend(props), {
       initialProps: options,
     });
@@ -124,80 +118,8 @@ describe("useQueuedSend", () => {
     });
 
     expect(options.sendUserMessage).toHaveBeenCalledTimes(1);
-    expect(options.sendUserMessage).toHaveBeenCalledWith(
-      "Steer",
-      [],
-      undefined,
-      { sendIntent: "steer" },
-    );
+    expect(options.sendUserMessage).toHaveBeenCalledWith("Steer", []);
     expect(result.current.activeQueue).toHaveLength(0);
-  });
-
-  it("queues send while processing when steer is enabled but turn id is unavailable", async () => {
-    const options = makeOptions({
-      isProcessing: true,
-      steerEnabled: true,
-      followUpMessageBehavior: "steer",
-      activeTurnId: null,
-    });
-    const { result } = renderHook((props) => useQueuedSend(props), {
-      initialProps: options,
-    });
-
-    await act(async () => {
-      await result.current.handleSend("Wait for turn");
-    });
-
-    expect(options.sendUserMessage).not.toHaveBeenCalled();
-    expect(result.current.activeQueue).toHaveLength(1);
-    expect(result.current.activeQueue[0]?.text).toBe("Wait for turn");
-  });
-
-  it("queues the message when a forced steer attempt fails", async () => {
-    const sendUserMessage = vi
-      .fn()
-      .mockResolvedValueOnce({ status: "steer_failed" })
-      .mockResolvedValueOnce({ status: "sent" });
-    const options = makeOptions({
-      isProcessing: true,
-      steerEnabled: true,
-      followUpMessageBehavior: "steer",
-      sendUserMessage,
-    });
-    const { result, rerender } = renderHook((props) => useQueuedSend(props), {
-      initialProps: options,
-    });
-
-    await act(async () => {
-      await result.current.handleSend("Fallback to queue");
-    });
-
-    expect(options.sendUserMessage).toHaveBeenCalledWith(
-      "Fallback to queue",
-      [],
-      undefined,
-      { sendIntent: "steer" },
-    );
-    expect(result.current.activeQueue).toHaveLength(1);
-    expect(result.current.activeQueue[0]?.text).toBe("Fallback to queue");
-
-    await act(async () => {
-      await Promise.resolve();
-    });
-    expect(options.sendUserMessage).toHaveBeenCalledTimes(1);
-
-    await act(async () => {
-      rerender({ ...options, isProcessing: false, sendUserMessage });
-    });
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    expect(options.sendUserMessage).toHaveBeenCalledTimes(2);
-    expect(options.sendUserMessage).toHaveBeenLastCalledWith(
-      "Fallback to queue",
-      [],
-    );
   });
 
   it("retries queued send after failure", async () => {
@@ -205,7 +127,7 @@ describe("useQueuedSend", () => {
       sendUserMessage: vi
         .fn()
         .mockRejectedValueOnce(new Error("boom"))
-        .mockResolvedValueOnce({ status: "sent" }),
+        .mockResolvedValueOnce(undefined),
     });
     const { result } = renderHook((props) => useQueuedSend(props), {
       initialProps: options,
@@ -275,12 +197,7 @@ describe("useQueuedSend", () => {
       ...workspace,
       connected: false,
     });
-    expect(options.sendUserMessage).toHaveBeenCalledWith(
-      "Connect",
-      [],
-      undefined,
-      { sendIntent: "default" },
-    );
+    expect(options.sendUserMessage).toHaveBeenCalledWith("Connect", []);
   });
 
   it("ignores images for queued review messages and blocks while reviewing", async () => {
@@ -422,12 +339,7 @@ describe("useQueuedSend", () => {
     });
 
     expect(startApps).not.toHaveBeenCalled();
-    expect(options.sendUserMessage).toHaveBeenCalledWith(
-      "/apps now",
-      ["img-1"],
-      undefined,
-      { sendIntent: "default" },
-    );
+    expect(options.sendUserMessage).toHaveBeenCalledWith("/apps now", ["img-1"]);
   });
 
   it("routes /resume to the resume handler", async () => {
@@ -512,33 +424,4 @@ describe("useQueuedSend", () => {
       "img-2",
     ]);
   });
-
-  it("does not flush queued messages while response is required", async () => {
-    const options = makeOptions({ queueFlushPaused: true });
-    const { result, rerender } = renderHook((props) => useQueuedSend(props), {
-      initialProps: options,
-    });
-
-    await act(async () => {
-      await result.current.queueMessage("Held");
-    });
-
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    expect(options.sendUserMessage).not.toHaveBeenCalled();
-
-    await act(async () => {
-      rerender({ ...options, queueFlushPaused: false });
-    });
-
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    expect(options.sendUserMessage).toHaveBeenCalledTimes(1);
-    expect(options.sendUserMessage).toHaveBeenCalledWith("Held", []);
-  });
-
 });

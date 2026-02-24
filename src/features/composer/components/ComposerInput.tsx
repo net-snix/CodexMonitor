@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import type {
   ChangeEvent,
   ClipboardEvent,
@@ -15,7 +15,6 @@ import Square from "lucide-react/dist/esm/icons/square";
 import Brain from "lucide-react/dist/esm/icons/brain";
 import GitFork from "lucide-react/dist/esm/icons/git-fork";
 import PlusCircle from "lucide-react/dist/esm/icons/plus-circle";
-import Plus from "lucide-react/dist/esm/icons/plus";
 import Info from "lucide-react/dist/esm/icons/info";
 import RotateCcw from "lucide-react/dist/esm/icons/rotate-ccw";
 import ScrollText from "lucide-react/dist/esm/icons/scroll-text";
@@ -23,10 +22,6 @@ import Wrench from "lucide-react/dist/esm/icons/wrench";
 import FileText from "lucide-react/dist/esm/icons/file-text";
 import Plug from "lucide-react/dist/esm/icons/plug";
 import { useComposerImageDrop } from "../hooks/useComposerImageDrop";
-import {
-  PopoverMenuItem,
-  PopoverSurface,
-} from "../../design-system/components/popover/PopoverPrimitives";
 import { ComposerAttachments } from "./ComposerAttachments";
 import { DictationWaveform } from "../../dictation/components/DictationWaveform";
 import { ReviewInlinePrompt } from "./ReviewInlinePrompt";
@@ -191,10 +186,8 @@ export function ComposerInput({
 }: ComposerInputProps) {
   const suggestionListRef = useRef<HTMLDivElement | null>(null);
   const suggestionRefs = useRef<Array<HTMLButtonElement | null>>([]);
-  const mobileActionsRef = useRef<HTMLDivElement | null>(null);
-  const [mobileActionsOpen, setMobileActionsOpen] = useState(false);
-  const [isPhoneLayout, setIsPhoneLayout] = useState(false);
-  const [isPhoneTallInput, setIsPhoneTallInput] = useState(false);
+  const minTextareaHeight = isExpanded ? 180 : 60;
+  const maxTextareaHeight = isExpanded ? 320 : 120;
   const reviewPromptOpen = Boolean(reviewPrompt);
   const {
     dropTargetRef,
@@ -234,36 +227,6 @@ export function ComposerInput({
     if (!textarea) {
       return;
     }
-    const appRoot = textarea.closest(".app");
-    if (!(appRoot instanceof HTMLElement)) {
-      setIsPhoneLayout(false);
-      return;
-    }
-
-    const syncLayout = () => {
-      const nextIsPhoneLayout = appRoot.classList.contains("layout-phone");
-      setIsPhoneLayout((prev) => (prev === nextIsPhoneLayout ? prev : nextIsPhoneLayout));
-    };
-
-    syncLayout();
-    const observer = new MutationObserver((records) => {
-      if (records.some((record) => record.attributeName === "class")) {
-        syncLayout();
-      }
-    });
-    observer.observe(appRoot, { attributes: true, attributeFilter: ["class"] });
-    return () => {
-      observer.disconnect();
-    };
-  }, [textareaRef]);
-
-  useEffect(() => {
-    const textarea = textareaRef.current;
-    if (!textarea) {
-      return;
-    }
-    const minTextareaHeight = isExpanded ? (isPhoneLayout ? 152 : 180) : isPhoneLayout ? 52 : 60;
-    const maxTextareaHeight = isExpanded ? (isPhoneLayout ? 280 : 320) : isPhoneLayout ? 168 : 120;
     textarea.style.height = "auto";
     textarea.style.minHeight = `${minTextareaHeight}px`;
     textarea.style.maxHeight = `${maxTextareaHeight}px`;
@@ -274,54 +237,7 @@ export function ComposerInput({
     textarea.style.height = `${nextHeight}px`;
     textarea.style.overflowY =
       textarea.scrollHeight > maxTextareaHeight ? "auto" : "hidden";
-
-    if (!isPhoneLayout) {
-      setIsPhoneTallInput((prev) => (prev ? false : prev));
-      return;
-    }
-
-    const computedStyle = window.getComputedStyle(textarea);
-    const lineHeight = Number.parseFloat(computedStyle.lineHeight) || 20;
-    const paddingTop = Number.parseFloat(computedStyle.paddingTop) || 0;
-    const paddingBottom = Number.parseFloat(computedStyle.paddingBottom) || 0;
-    const contentHeight = Math.max(0, nextHeight - paddingTop - paddingBottom);
-    const estimatedLineCount = contentHeight / lineHeight;
-    const nextIsPhoneTallInput = estimatedLineCount > 2.25;
-    setIsPhoneTallInput((prev) => (prev === nextIsPhoneTallInput ? prev : nextIsPhoneTallInput));
-  }, [isExpanded, isPhoneLayout, text, textareaRef]);
-
-  useEffect(() => {
-    if (!mobileActionsOpen) {
-      return;
-    }
-
-    const handlePointerDown = (event: PointerEvent) => {
-      const target = event.target as Node | null;
-      if (target && mobileActionsRef.current?.contains(target)) {
-        return;
-      }
-      setMobileActionsOpen(false);
-    };
-
-    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setMobileActionsOpen(false);
-      }
-    };
-
-    window.addEventListener("pointerdown", handlePointerDown);
-    window.addEventListener("keydown", handleKeyDown);
-    return () => {
-      window.removeEventListener("pointerdown", handlePointerDown);
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [mobileActionsOpen]);
-
-  useEffect(() => {
-    if (disabled && mobileActionsOpen) {
-      setMobileActionsOpen(false);
-    }
-  }, [disabled, mobileActionsOpen]);
+  }, [maxTextareaHeight, minTextareaHeight, text, textareaRef]);
 
   const handleActionClick = useCallback(() => {
     if (canStop) {
@@ -391,29 +307,8 @@ export function ComposerInput({
     [handlePaste, onTextPaste],
   );
 
-  const handleMobileAttachClick = useCallback(() => {
-    if (disabled || !onAddAttachment) {
-      return;
-    }
-    setMobileActionsOpen(false);
-    onAddAttachment();
-  }, [disabled, onAddAttachment]);
-
-  const handleMobileExpandClick = useCallback(() => {
-    if (disabled || !onToggleExpand) {
-      return;
-    }
-    setMobileActionsOpen(false);
-    onToggleExpand();
-  }, [disabled, onToggleExpand]);
-
-  const handleMobileDictationClick = useCallback(() => {
-    setMobileActionsOpen(false);
-    handleMicClick();
-  }, [handleMicClick]);
-
   return (
-    <div className={`composer-input${isPhoneLayout && isPhoneTallInput ? " is-phone-tall" : ""}`}>
+    <div className="composer-input">
       <div
         className={`composer-input-area${isDragOver ? " is-drag-over" : ""}`}
         ref={dropTargetRef}
@@ -438,62 +333,6 @@ export function ComposerInput({
           >
             <ImagePlus size={14} aria-hidden />
           </button>
-          <div
-            className={`composer-mobile-menu${mobileActionsOpen ? " is-open" : ""}`}
-            ref={mobileActionsRef}
-          >
-            <button
-              type="button"
-              className="composer-action composer-action--mobile-menu"
-              onClick={() => setMobileActionsOpen((prev) => !prev)}
-              disabled={disabled}
-              aria-expanded={mobileActionsOpen}
-              aria-haspopup="menu"
-              aria-label="More actions"
-              title="More actions"
-            >
-              <Plus size={14} aria-hidden />
-            </button>
-            {mobileActionsOpen && (
-              <PopoverSurface className="composer-mobile-actions-popover" role="menu">
-                <PopoverMenuItem
-                  onClick={handleMobileAttachClick}
-                  disabled={disabled || !onAddAttachment}
-                  icon={<ImagePlus size={14} />}
-                >
-                  Add image
-                </PopoverMenuItem>
-                {onToggleExpand && (
-                  <PopoverMenuItem
-                    onClick={handleMobileExpandClick}
-                    disabled={disabled}
-                    icon={
-                      isExpanded ? (
-                        <ChevronDown size={14} />
-                      ) : (
-                        <ChevronUp size={14} />
-                      )
-                    }
-                  >
-                    {isExpanded ? "Collapse input" : "Expand input"}
-                  </PopoverMenuItem>
-                )}
-                {(onToggleDictation || onOpenDictationSettings) && (
-                  <PopoverMenuItem
-                    onClick={handleMobileDictationClick}
-                    disabled={
-                      disabled ||
-                      dictationState === "processing" ||
-                      (!onToggleDictation && !allowOpenDictationSettings)
-                    }
-                    icon={isDictating ? <Square size={14} /> : <Mic size={14} />}
-                  >
-                    {micAriaLabel}
-                  </PopoverMenuItem>
-                )}
-              </PopoverSurface>
-            )}
-          </div>
           <textarea
             ref={textareaRef}
             placeholder={
@@ -547,8 +386,8 @@ export function ComposerInput({
           </div>
         )}
         {suggestionsOpen && (
-          <PopoverSurface
-            className={`composer-suggestions${
+          <div
+            className={`composer-suggestions popover-surface${
               reviewPromptOpen ? " review-inline-suggestions" : ""
             }`}
             role="listbox"
@@ -666,7 +505,7 @@ export function ComposerInput({
                 );
               })
             )}
-          </PopoverSurface>
+          </div>
         )}
       </div>
       {onToggleExpand && (
@@ -704,9 +543,8 @@ export function ComposerInput({
           canStop && isProcessing ? " is-loading" : ""
         }`}
         onClick={handleActionClick}
-        disabled={(disabled && !canStop) || isDictationBusy || (!canStop && !canSend)}
+        disabled={disabled || isDictationBusy || (!canStop && !canSend)}
         aria-label={canStop ? "Stop" : sendLabel}
-        title={canStop ? "Stop" : sendLabel}
       >
         {canStop ? (
           <>

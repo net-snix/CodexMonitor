@@ -4,9 +4,8 @@ import { describe, expect, it, vi } from "vitest";
 import { Home } from "./Home";
 
 const baseProps = {
-  onOpenSettings: vi.fn(),
+  onOpenProject: vi.fn(),
   onAddWorkspace: vi.fn(),
-  onAddWorkspaceFromUrl: vi.fn(),
   latestAgentRuns: [],
   isLoadingLatestAgents: false,
   localUsageSnapshot: null,

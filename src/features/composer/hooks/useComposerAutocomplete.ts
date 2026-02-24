@@ -8,7 +8,6 @@ export type AutocompleteItem = {
   hint?: string;
   cursorOffset?: number;
   group?: "Files" | "Skills" | "Apps" | "Slash" | "Prompts";
-  mentionPath?: string;
 };
 
 export type AutocompleteTrigger = {

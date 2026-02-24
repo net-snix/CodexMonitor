@@ -1,7 +1,7 @@
 import { useCallback } from "react";
 import type { Dispatch } from "react";
-import { buildConversationItem } from "@utils/threadItems";
-import { asString } from "@threads/utils/threadNormalize";
+import { buildConversationItem } from "../../../utils/threadItems";
+import { asString } from "../utils/threadNormalize";
 import type { ThreadAction } from "./useThreadsReducer";
 
 type UseThreadItemEventsOptions = {
@@ -17,15 +17,9 @@ type UseThreadItemEventsOptions = {
     timestamp?: number,
   ) => void;
   applyCollabThreadLinks: (
-    workspaceId: string,
     threadId: string,
     item: Record<string, unknown>,
   ) => void;
-  onUserMessageCreated?: (
-    workspaceId: string,
-    threadId: string,
-    text: string,
-  ) => void | Promise<void>;
   onReviewExited?: (workspaceId: string, threadId: string) => void;
 };
 
@@ -38,7 +32,6 @@ export function useThreadItemEvents({
   safeMessageActivity,
   recordThreadActivity,
   applyCollabThreadLinks,
-  onUserMessageCreated,
   onReviewExited,
 }: UseThreadItemEventsOptions) {
   const handleItemUpdate = useCallback(
@@ -52,7 +45,7 @@ export function useThreadItemEvents({
       if (shouldMarkProcessing) {
         markProcessing(threadId, true);
       }
-      applyCollabThreadLinks(workspaceId, threadId, item);
+      applyCollabThreadLinks(threadId, item);
       const itemType = asString(item?.type ?? "");
       if (itemType === "enteredReviewMode") {
         markReviewing(threadId, true);
@@ -64,7 +57,7 @@ export function useThreadItemEvents({
         }
       }
       const itemForDisplay =
-        itemType === "contextCompaction" || itemType === "webSearch"
+        itemType === "contextCompaction"
           ? ({
               ...item,
               status: shouldMarkProcessing ? "inProgress" : "completed",
@@ -72,9 +65,6 @@ export function useThreadItemEvents({
           : item;
       const converted = buildConversationItem(itemForDisplay);
       if (converted) {
-        if (converted.kind === "message" && converted.role === "user") {
-          void onUserMessageCreated?.(workspaceId, threadId, converted.text);
-        }
         dispatch({
           type: "upsertItem",
           workspaceId,
@@ -92,7 +82,6 @@ export function useThreadItemEvents({
       markProcessing,
       markReviewing,
       onReviewExited,
-      onUserMessageCreated,
       safeMessageActivity,
     ],
   );

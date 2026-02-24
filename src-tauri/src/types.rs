@@ -187,59 +187,6 @@ pub(crate) struct LocalUsageSnapshot {
     pub(crate) top_models: Vec<LocalUsageModel>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub(crate) enum TcpDaemonState {
-    Stopped,
-    Running,
-    Error,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct TcpDaemonStatus {
-    pub(crate) state: TcpDaemonState,
-    #[serde(default)]
-    pub(crate) pid: Option<u32>,
-    #[serde(default)]
-    pub(crate) started_at_ms: Option<i64>,
-    #[serde(default)]
-    pub(crate) last_error: Option<String>,
-    #[serde(default)]
-    pub(crate) listen_addr: Option<String>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct TailscaleStatus {
-    pub(crate) installed: bool,
-    pub(crate) running: bool,
-    #[serde(default)]
-    pub(crate) version: Option<String>,
-    #[serde(default)]
-    pub(crate) dns_name: Option<String>,
-    #[serde(default)]
-    pub(crate) host_name: Option<String>,
-    #[serde(default)]
-    pub(crate) tailnet_name: Option<String>,
-    #[serde(default)]
-    pub(crate) ipv4: Vec<String>,
-    #[serde(default)]
-    pub(crate) ipv6: Vec<String>,
-    #[serde(default)]
-    pub(crate) suggested_remote_host: Option<String>,
-    pub(crate) message: String,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct TailscaleDaemonCommandPreview {
-    pub(crate) command: String,
-    pub(crate) daemon_path: String,
-    pub(crate) args: Vec<String>,
-    pub(crate) token_configured: bool,
-}
-
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub(crate) struct BranchInfo {
     pub(crate) name: String,
@@ -251,6 +198,7 @@ pub(crate) struct WorkspaceEntry {
     pub(crate) id: String,
     pub(crate) name: String,
     pub(crate) path: String,
+    pub(crate) codex_bin: Option<String>,
     #[serde(default)]
     pub(crate) kind: WorkspaceKind,
     #[serde(default, rename = "parentId")]
@@ -267,6 +215,7 @@ pub(crate) struct WorkspaceInfo {
     pub(crate) name: String,
     pub(crate) path: String,
     pub(crate) connected: bool,
+    pub(crate) codex_bin: Option<String>,
     #[serde(default)]
     pub(crate) kind: WorkspaceKind,
     #[serde(default, rename = "parentId")]
@@ -319,10 +268,12 @@ pub(crate) struct WorkspaceSettings {
     pub(crate) sort_order: Option<u32>,
     #[serde(default, rename = "groupId")]
     pub(crate) group_id: Option<String>,
-    #[serde(default, rename = "cloneSourceWorkspaceId")]
-    pub(crate) clone_source_workspace_id: Option<String>,
     #[serde(default, rename = "gitRoot")]
     pub(crate) git_root: Option<String>,
+    #[serde(default, rename = "codexHome")]
+    pub(crate) codex_home: Option<String>,
+    #[serde(default, rename = "codexArgs")]
+    pub(crate) codex_args: Option<String>,
     #[serde(default, rename = "launchScript")]
     pub(crate) launch_script: Option<String>,
     #[serde(default, rename = "launchScripts")]
@@ -360,17 +311,20 @@ pub(crate) struct OpenAppTarget {
     pub(crate) args: Vec<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub(crate) struct RemoteBackendTarget {
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+pub(crate) struct CodexProfile {
     pub(crate) id: String,
-    pub(crate) name: String,
-    pub(crate) provider: RemoteBackendProvider,
-    #[serde(default = "default_remote_backend_host")]
-    pub(crate) host: String,
-    #[serde(default)]
-    pub(crate) token: Option<String>,
-    #[serde(default, rename = "lastConnectedAtMs")]
-    pub(crate) last_connected_at_ms: Option<i64>,
+    pub(crate) label: String,
+    #[serde(default, rename = "codexHome")]
+    pub(crate) codex_home: String,
+    #[serde(default, rename = "cachedEmail")]
+    pub(crate) cached_email: Option<String>,
+    #[serde(default, rename = "cachedPlanType")]
+    pub(crate) cached_plan_type: Option<String>,
+    #[serde(default, rename = "lastUsedAt")]
+    pub(crate) last_used_at: Option<String>,
+    #[serde(default, rename = "createdAt")]
+    pub(crate) created_at: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -379,26 +333,19 @@ pub(crate) struct AppSettings {
     pub(crate) codex_bin: Option<String>,
     #[serde(default, rename = "codexArgs")]
     pub(crate) codex_args: Option<String>,
+    #[serde(default, rename = "codexProfiles")]
+    pub(crate) codex_profiles: Vec<CodexProfile>,
+    #[serde(default, rename = "activeCodexProfileId")]
+    pub(crate) active_codex_profile_id: Option<String>,
     #[serde(default, rename = "backendMode")]
     pub(crate) backend_mode: BackendMode,
-    #[serde(default, rename = "remoteBackendProvider")]
-    pub(crate) remote_backend_provider: RemoteBackendProvider,
     #[serde(default = "default_remote_backend_host", rename = "remoteBackendHost")]
     pub(crate) remote_backend_host: String,
     #[serde(default, rename = "remoteBackendToken")]
     pub(crate) remote_backend_token: Option<String>,
-    #[serde(default = "default_remote_backends", rename = "remoteBackends")]
-    pub(crate) remote_backends: Vec<RemoteBackendTarget>,
-    #[serde(default, rename = "activeRemoteBackendId")]
-    pub(crate) active_remote_backend_id: Option<String>,
-    #[serde(default, rename = "keepDaemonRunningAfterAppClose")]
-    pub(crate) keep_daemon_running_after_app_close: bool,
     #[serde(default = "default_access_mode", rename = "defaultAccessMode")]
     pub(crate) default_access_mode: String,
-    #[serde(
-        default = "default_review_delivery_mode",
-        rename = "reviewDeliveryMode"
-    )]
+    #[serde(default = "default_review_delivery_mode", rename = "reviewDeliveryMode")]
     pub(crate) review_delivery_mode: String,
     #[serde(
         default = "default_composer_model_shortcut",
@@ -487,23 +434,10 @@ pub(crate) struct AppSettings {
     pub(crate) ui_scale: f64,
     #[serde(default = "default_theme", rename = "theme")]
     pub(crate) theme: String,
-    #[serde(
-        default = "default_usage_show_remaining",
-        rename = "usageShowRemaining"
-    )]
+    #[serde(default = "default_usage_show_remaining", rename = "usageShowRemaining")]
     pub(crate) usage_show_remaining: bool,
-    #[serde(
-        default = "default_show_message_file_path",
-        rename = "showMessageFilePath"
-    )]
-    pub(crate) show_message_file_path: bool,
-    #[serde(
-        default = "default_chat_history_scrollback_items",
-        rename = "chatHistoryScrollbackItems"
-    )]
-    pub(crate) chat_history_scrollback_items: Option<u32>,
-    #[serde(default, rename = "threadTitleAutogenerationEnabled")]
-    pub(crate) thread_title_autogeneration_enabled: bool,
+    #[serde(default, rename = "autoSwitchOnLimit")]
+    pub(crate) auto_switch_on_limit: bool,
     #[serde(default = "default_ui_font_family", rename = "uiFontFamily")]
     pub(crate) ui_font_family: String,
     #[serde(default = "default_code_font_family", rename = "codeFontFamily")]
@@ -515,8 +449,6 @@ pub(crate) struct AppSettings {
         rename = "notificationSoundsEnabled"
     )]
     pub(crate) notification_sounds_enabled: bool,
-    #[serde(default = "default_split_chat_diff_view", rename = "splitChatDiffView")]
-    pub(crate) split_chat_diff_view: bool,
     #[serde(default = "default_preload_git_diffs", rename = "preloadGitDiffs")]
     pub(crate) preload_git_diffs: bool,
     #[serde(
@@ -525,22 +457,15 @@ pub(crate) struct AppSettings {
     )]
     pub(crate) git_diff_ignore_whitespace_changes: bool,
     #[serde(
-        default = "default_commit_message_prompt",
-        rename = "commitMessagePrompt"
-    )]
-    pub(crate) commit_message_prompt: String,
-    #[serde(default, rename = "commitMessageModelId")]
-    pub(crate) commit_message_model_id: Option<String>,
-    #[serde(
         default = "default_system_notifications_enabled",
         rename = "systemNotificationsEnabled"
     )]
     pub(crate) system_notifications_enabled: bool,
     #[serde(
-        default = "default_subagent_system_notifications_enabled",
-        rename = "subagentSystemNotificationsEnabled"
+        default = "default_experimental_collab_enabled",
+        rename = "experimentalCollabEnabled"
     )]
-    pub(crate) subagent_system_notifications_enabled: bool,
+    pub(crate) experimental_collab_enabled: bool,
     #[serde(
         default = "default_collaboration_modes_enabled",
         rename = "collaborationModesEnabled"
@@ -553,21 +478,6 @@ pub(crate) struct AppSettings {
     )]
     pub(crate) steer_enabled: bool,
     #[serde(
-        default = "default_follow_up_message_behavior",
-        rename = "followUpMessageBehavior"
-    )]
-    pub(crate) follow_up_message_behavior: String,
-    #[serde(
-        default = "default_composer_follow_up_hint_enabled",
-        rename = "composerFollowUpHintEnabled"
-    )]
-    pub(crate) composer_follow_up_hint_enabled: bool,
-    #[serde(
-        default = "default_pause_queued_messages_when_response_required",
-        rename = "pauseQueuedMessagesWhenResponseRequired"
-    )]
-    pub(crate) pause_queued_messages_when_response_required: bool,
-    #[serde(
         default = "default_unified_exec_enabled",
         rename = "unifiedExecEnabled",
         alias = "experimentalUnifiedExecEnabled"
@@ -578,55 +488,40 @@ pub(crate) struct AppSettings {
         rename = "experimentalAppsEnabled"
     )]
     pub(crate) experimental_apps_enabled: bool,
-    #[serde(default = "default_personality", rename = "personality")]
+    #[serde(
+        default = "default_personality",
+        rename = "personality"
+    )]
     pub(crate) personality: String,
     #[serde(default = "default_dictation_enabled", rename = "dictationEnabled")]
     pub(crate) dictation_enabled: bool,
-    #[serde(default = "default_dictation_model_id", rename = "dictationModelId")]
+    #[serde(
+        default = "default_dictation_model_id",
+        rename = "dictationModelId"
+    )]
     pub(crate) dictation_model_id: String,
     #[serde(default, rename = "dictationPreferredLanguage")]
     pub(crate) dictation_preferred_language: Option<String>,
-    #[serde(default = "default_dictation_hold_key", rename = "dictationHoldKey")]
+    #[serde(
+        default = "default_dictation_hold_key",
+        rename = "dictationHoldKey"
+    )]
     pub(crate) dictation_hold_key: String,
-    #[serde(
-        default = "default_composer_editor_preset",
-        rename = "composerEditorPreset"
-    )]
+    #[serde(default = "default_composer_editor_preset", rename = "composerEditorPreset")]
     pub(crate) composer_editor_preset: String,
-    #[serde(
-        default = "default_composer_fence_expand_on_space",
-        rename = "composerFenceExpandOnSpace"
-    )]
+    #[serde(default = "default_composer_fence_expand_on_space", rename = "composerFenceExpandOnSpace")]
     pub(crate) composer_fence_expand_on_space: bool,
-    #[serde(
-        default = "default_composer_fence_expand_on_enter",
-        rename = "composerFenceExpandOnEnter"
-    )]
+    #[serde(default = "default_composer_fence_expand_on_enter", rename = "composerFenceExpandOnEnter")]
     pub(crate) composer_fence_expand_on_enter: bool,
-    #[serde(
-        default = "default_composer_fence_language_tags",
-        rename = "composerFenceLanguageTags"
-    )]
+    #[serde(default = "default_composer_fence_language_tags", rename = "composerFenceLanguageTags")]
     pub(crate) composer_fence_language_tags: bool,
-    #[serde(
-        default = "default_composer_fence_wrap_selection",
-        rename = "composerFenceWrapSelection"
-    )]
+    #[serde(default = "default_composer_fence_wrap_selection", rename = "composerFenceWrapSelection")]
     pub(crate) composer_fence_wrap_selection: bool,
-    #[serde(
-        default = "default_composer_fence_auto_wrap_paste_multiline",
-        rename = "composerFenceAutoWrapPasteMultiline"
-    )]
+    #[serde(default = "default_composer_fence_auto_wrap_paste_multiline", rename = "composerFenceAutoWrapPasteMultiline")]
     pub(crate) composer_fence_auto_wrap_paste_multiline: bool,
-    #[serde(
-        default = "default_composer_fence_auto_wrap_paste_code_like",
-        rename = "composerFenceAutoWrapPasteCodeLike"
-    )]
+    #[serde(default = "default_composer_fence_auto_wrap_paste_code_like", rename = "composerFenceAutoWrapPasteCodeLike")]
     pub(crate) composer_fence_auto_wrap_paste_code_like: bool,
-    #[serde(
-        default = "default_composer_list_continuation",
-        rename = "composerListContinuation"
-    )]
+    #[serde(default = "default_composer_list_continuation", rename = "composerListContinuation")]
     pub(crate) composer_list_continuation: bool,
     #[serde(
         default = "default_composer_code_block_copy_use_modifier",
@@ -650,19 +545,7 @@ pub(crate) enum BackendMode {
 
 impl Default for BackendMode {
     fn default() -> Self {
-        default_backend_mode()
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
-pub(crate) enum RemoteBackendProvider {
-    Tcp,
-}
-
-impl Default for RemoteBackendProvider {
-    fn default() -> Self {
-        RemoteBackendProvider::Tcp
+        BackendMode::Local
     }
 }
 
@@ -674,20 +557,8 @@ fn default_review_delivery_mode() -> String {
     "inline".to_string()
 }
 
-fn default_backend_mode() -> BackendMode {
-    if cfg!(target_os = "ios") {
-        BackendMode::Remote
-    } else {
-        BackendMode::Local
-    }
-}
-
 fn default_remote_backend_host() -> String {
     "127.0.0.1:4732".to_string()
-}
-
-fn default_remote_backends() -> Vec<RemoteBackendTarget> {
-    Vec::new()
 }
 
 fn default_ui_scale() -> f64 {
@@ -702,20 +573,13 @@ fn default_usage_show_remaining() -> bool {
     false
 }
 
-fn default_show_message_file_path() -> bool {
-    true
-}
-
-fn default_chat_history_scrollback_items() -> Option<u32> {
-    Some(200)
-}
-
 fn default_ui_font_family() -> String {
-    "system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, \"Helvetica Neue\", Arial, sans-serif".to_string()
+    "\"SF Pro Text\", \"SF Pro Display\", -apple-system, \"Helvetica Neue\", sans-serif"
+        .to_string()
 }
 
 fn default_code_font_family() -> String {
-    "ui-monospace, \"Cascadia Mono\", \"Segoe UI Mono\", Menlo, Monaco, Consolas, \"Liberation Mono\", \"Courier New\", monospace".to_string()
+    "\"SF Mono\", \"SFMono-Regular\", Menlo, Monaco, monospace".to_string()
 }
 
 fn default_code_font_size() -> u8 {
@@ -723,30 +587,15 @@ fn default_code_font_size() -> u8 {
 }
 
 fn default_composer_model_shortcut() -> Option<String> {
-    let value = if cfg!(target_os = "macos") {
-        "cmd+shift+m"
-    } else {
-        "ctrl+shift+m"
-    };
-    Some(value.to_string())
+    Some("cmd+shift+m".to_string())
 }
 
 fn default_composer_access_shortcut() -> Option<String> {
-    let value = if cfg!(target_os = "macos") {
-        "cmd+shift+a"
-    } else {
-        "ctrl+shift+a"
-    };
-    Some(value.to_string())
+    Some("cmd+shift+a".to_string())
 }
 
 fn default_composer_reasoning_shortcut() -> Option<String> {
-    let value = if cfg!(target_os = "macos") {
-        "cmd+shift+r"
-    } else {
-        "ctrl+shift+r"
-    };
-    Some(value.to_string())
+    Some("cmd+shift+r".to_string())
 }
 
 fn default_interrupt_shortcut() -> Option<String> {
@@ -763,111 +612,51 @@ fn default_composer_collaboration_shortcut() -> Option<String> {
 }
 
 fn default_new_agent_shortcut() -> Option<String> {
-    let value = if cfg!(target_os = "macos") {
-        "cmd+n"
-    } else {
-        "ctrl+n"
-    };
-    Some(value.to_string())
+    Some("cmd+n".to_string())
 }
 
 fn default_new_worktree_agent_shortcut() -> Option<String> {
-    let value = if cfg!(target_os = "macos") {
-        "cmd+shift+n"
-    } else {
-        "ctrl+shift+n"
-    };
-    Some(value.to_string())
+    Some("cmd+shift+n".to_string())
 }
 
 fn default_new_clone_agent_shortcut() -> Option<String> {
-    let value = if cfg!(target_os = "macos") {
-        "cmd+alt+n"
-    } else {
-        "ctrl+alt+n"
-    };
-    Some(value.to_string())
+    Some("cmd+alt+n".to_string())
 }
 
 fn default_archive_thread_shortcut() -> Option<String> {
-    let value = if cfg!(target_os = "macos") {
-        "cmd+ctrl+a"
-    } else {
-        "ctrl+alt+a"
-    };
-    Some(value.to_string())
+    Some("cmd+ctrl+a".to_string())
 }
 
 fn default_toggle_projects_sidebar_shortcut() -> Option<String> {
-    let value = if cfg!(target_os = "macos") {
-        "cmd+shift+p"
-    } else {
-        "ctrl+shift+p"
-    };
-    Some(value.to_string())
+    Some("cmd+shift+p".to_string())
 }
 
 fn default_toggle_git_sidebar_shortcut() -> Option<String> {
-    let value = if cfg!(target_os = "macos") {
-        "cmd+shift+g"
-    } else {
-        "ctrl+shift+g"
-    };
-    Some(value.to_string())
+    Some("cmd+shift+g".to_string())
 }
 
 fn default_toggle_debug_panel_shortcut() -> Option<String> {
-    let value = if cfg!(target_os = "macos") {
-        "cmd+shift+d"
-    } else {
-        "ctrl+shift+d"
-    };
-    Some(value.to_string())
+    Some("cmd+shift+d".to_string())
 }
 
 fn default_toggle_terminal_shortcut() -> Option<String> {
-    let value = if cfg!(target_os = "macos") {
-        "cmd+shift+t"
-    } else {
-        "ctrl+shift+t"
-    };
-    Some(value.to_string())
+    Some("cmd+shift+t".to_string())
 }
 
 fn default_cycle_agent_next_shortcut() -> Option<String> {
-    let value = if cfg!(target_os = "macos") {
-        "cmd+ctrl+down"
-    } else {
-        "ctrl+alt+down"
-    };
-    Some(value.to_string())
+    Some("cmd+ctrl+down".to_string())
 }
 
 fn default_cycle_agent_prev_shortcut() -> Option<String> {
-    let value = if cfg!(target_os = "macos") {
-        "cmd+ctrl+up"
-    } else {
-        "ctrl+alt+up"
-    };
-    Some(value.to_string())
+    Some("cmd+ctrl+up".to_string())
 }
 
 fn default_cycle_workspace_next_shortcut() -> Option<String> {
-    let value = if cfg!(target_os = "macos") {
-        "cmd+shift+down"
-    } else {
-        "ctrl+alt+shift+down"
-    };
-    Some(value.to_string())
+    Some("cmd+shift+down".to_string())
 }
 
 fn default_cycle_workspace_prev_shortcut() -> Option<String> {
-    let value = if cfg!(target_os = "macos") {
-        "cmd+shift+up"
-    } else {
-        "ctrl+alt+shift+up"
-    };
-    Some(value.to_string())
+    Some("cmd+shift+up".to_string())
 }
 
 fn default_notification_sounds_enabled() -> bool {
@@ -878,14 +667,6 @@ fn default_system_notifications_enabled() -> bool {
     true
 }
 
-fn default_subagent_system_notifications_enabled() -> bool {
-    true
-}
-
-fn default_split_chat_diff_view() -> bool {
-    false
-}
-
 fn default_preload_git_diffs() -> bool {
     true
 }
@@ -894,13 +675,8 @@ fn default_git_diff_ignore_whitespace_changes() -> bool {
     false
 }
 
-fn default_commit_message_prompt() -> String {
-    "Generate a concise git commit message for the following changes. \
-Follow conventional commit format (e.g., feat:, fix:, refactor:, docs:, etc.). \
-Keep the summary line under 72 characters. \
-Only output the commit message, nothing else.\n\n\
-Changes:\n{diff}"
-        .to_string()
+fn default_experimental_collab_enabled() -> bool {
+    false
 }
 
 fn default_collaboration_modes_enabled() -> bool {
@@ -908,18 +684,6 @@ fn default_collaboration_modes_enabled() -> bool {
 }
 
 fn default_steer_enabled() -> bool {
-    true
-}
-
-fn default_follow_up_message_behavior() -> String {
-    "queue".to_string()
-}
-
-fn default_composer_follow_up_hint_enabled() -> bool {
-    true
-}
-
-fn default_pause_queued_messages_when_response_required() -> bool {
     true
 }
 
@@ -988,109 +752,50 @@ fn default_workspace_groups() -> Vec<WorkspaceGroup> {
 }
 
 fn default_open_app_targets() -> Vec<OpenAppTarget> {
-    if cfg!(target_os = "macos") {
-        return vec![
-            OpenAppTarget {
-                id: "vscode".to_string(),
-                label: "VS Code".to_string(),
-                kind: "app".to_string(),
-                app_name: Some("Visual Studio Code".to_string()),
-                command: None,
-                args: Vec::new(),
-            },
-            OpenAppTarget {
-                id: "cursor".to_string(),
-                label: "Cursor".to_string(),
-                kind: "app".to_string(),
-                app_name: Some("Cursor".to_string()),
-                command: None,
-                args: Vec::new(),
-            },
-            OpenAppTarget {
-                id: "zed".to_string(),
-                label: "Zed".to_string(),
-                kind: "app".to_string(),
-                app_name: Some("Zed".to_string()),
-                command: None,
-                args: Vec::new(),
-            },
-            OpenAppTarget {
-                id: "ghostty".to_string(),
-                label: "Ghostty".to_string(),
-                kind: "app".to_string(),
-                app_name: Some("Ghostty".to_string()),
-                command: None,
-                args: Vec::new(),
-            },
-            OpenAppTarget {
-                id: "antigravity".to_string(),
-                label: "Antigravity".to_string(),
-                kind: "app".to_string(),
-                app_name: Some("Antigravity".to_string()),
-                command: None,
-                args: Vec::new(),
-            },
-            OpenAppTarget {
-                id: "finder".to_string(),
-                label: "Finder".to_string(),
-                kind: "finder".to_string(),
-                app_name: None,
-                command: None,
-                args: Vec::new(),
-            },
-        ];
-    }
-
-    let file_manager_label = if cfg!(target_os = "windows") {
-        "Explorer"
-    } else {
-        "File Manager"
-    };
-
     vec![
         OpenAppTarget {
             id: "vscode".to_string(),
             label: "VS Code".to_string(),
-            kind: "command".to_string(),
-            app_name: None,
-            command: Some("code".to_string()),
+            kind: "app".to_string(),
+            app_name: Some("Visual Studio Code".to_string()),
+            command: None,
             args: Vec::new(),
         },
         OpenAppTarget {
             id: "cursor".to_string(),
             label: "Cursor".to_string(),
-            kind: "command".to_string(),
-            app_name: None,
-            command: Some("cursor".to_string()),
+            kind: "app".to_string(),
+            app_name: Some("Cursor".to_string()),
+            command: None,
             args: Vec::new(),
         },
         OpenAppTarget {
             id: "zed".to_string(),
             label: "Zed".to_string(),
-            kind: "command".to_string(),
-            app_name: None,
-            command: Some("zed".to_string()),
+            kind: "app".to_string(),
+            app_name: Some("Zed".to_string()),
+            command: None,
             args: Vec::new(),
         },
         OpenAppTarget {
             id: "ghostty".to_string(),
             label: "Ghostty".to_string(),
-            kind: "command".to_string(),
-            app_name: None,
-            command: Some("ghostty".to_string()),
+            kind: "app".to_string(),
+            app_name: Some("Ghostty".to_string()),
+            command: None,
             args: Vec::new(),
         },
         OpenAppTarget {
             id: "antigravity".to_string(),
             label: "Antigravity".to_string(),
-            kind: "command".to_string(),
-            app_name: None,
-            command: Some("antigravity".to_string()),
+            kind: "app".to_string(),
+            app_name: Some("Antigravity".to_string()),
+            command: None,
             args: Vec::new(),
         },
         OpenAppTarget {
             id: "finder".to_string(),
-            label: file_manager_label.to_string(),
+            label: "Finder".to_string(),
             kind: "finder".to_string(),
             app_name: None,
             command: None,
@@ -1100,11 +805,7 @@ fn default_open_app_targets() -> Vec<OpenAppTarget> {
 }
 
 fn default_selected_open_app_id() -> String {
-    if cfg!(target_os = "windows") {
-        "finder".to_string()
-    } else {
-        "vscode".to_string()
-    }
+    "vscode".to_string()
 }
 
 impl Default for AppSettings {
@@ -1112,13 +813,11 @@ impl Default for AppSettings {
         Self {
             codex_bin: None,
             codex_args: None,
-            backend_mode: default_backend_mode(),
-            remote_backend_provider: RemoteBackendProvider::Tcp,
+            codex_profiles: Vec::new(),
+            active_codex_profile_id: None,
+            backend_mode: BackendMode::Local,
             remote_backend_host: default_remote_backend_host(),
             remote_backend_token: None,
-            remote_backends: default_remote_backends(),
-            active_remote_backend_id: None,
-            keep_daemon_running_after_app_close: false,
             default_access_mode: "current".to_string(),
             review_delivery_mode: default_review_delivery_mode(),
             composer_model_shortcut: default_composer_model_shortcut(),
@@ -1143,26 +842,17 @@ impl Default for AppSettings {
             ui_scale: 1.0,
             theme: default_theme(),
             usage_show_remaining: default_usage_show_remaining(),
-            show_message_file_path: default_show_message_file_path(),
-            chat_history_scrollback_items: default_chat_history_scrollback_items(),
-            thread_title_autogeneration_enabled: false,
+            auto_switch_on_limit: false,
             ui_font_family: default_ui_font_family(),
             code_font_family: default_code_font_family(),
             code_font_size: default_code_font_size(),
             notification_sounds_enabled: true,
             system_notifications_enabled: true,
-            subagent_system_notifications_enabled: true,
-            split_chat_diff_view: default_split_chat_diff_view(),
             preload_git_diffs: default_preload_git_diffs(),
             git_diff_ignore_whitespace_changes: default_git_diff_ignore_whitespace_changes(),
-            commit_message_prompt: default_commit_message_prompt(),
-            commit_message_model_id: None,
+            experimental_collab_enabled: false,
             collaboration_modes_enabled: true,
             steer_enabled: true,
-            follow_up_message_behavior: default_follow_up_message_behavior(),
-            composer_follow_up_hint_enabled: default_composer_follow_up_hint_enabled(),
-            pause_queued_messages_when_response_required:
-                default_pause_queued_messages_when_response_required(),
             unified_exec_enabled: true,
             experimental_apps_enabled: false,
             personality: default_personality(),
@@ -1175,10 +865,8 @@ impl Default for AppSettings {
             composer_fence_expand_on_enter: default_composer_fence_expand_on_enter(),
             composer_fence_language_tags: default_composer_fence_language_tags(),
             composer_fence_wrap_selection: default_composer_fence_wrap_selection(),
-            composer_fence_auto_wrap_paste_multiline:
-                default_composer_fence_auto_wrap_paste_multiline(),
-            composer_fence_auto_wrap_paste_code_like:
-                default_composer_fence_auto_wrap_paste_code_like(),
+            composer_fence_auto_wrap_paste_multiline: default_composer_fence_auto_wrap_paste_multiline(),
+            composer_fence_auto_wrap_paste_code_like: default_composer_fence_auto_wrap_paste_code_like(),
             composer_list_continuation: default_composer_list_continuation(),
             composer_code_block_copy_use_modifier: default_composer_code_block_copy_use_modifier(),
             workspace_groups: default_workspace_groups(),
@@ -1191,55 +879,31 @@ impl Default for AppSettings {
 #[cfg(test)]
 mod tests {
     use super::{
-        AppSettings, BackendMode, RemoteBackendProvider, WorkspaceEntry, WorkspaceGroup,
-        WorkspaceKind, WorkspaceSettings,
+        AppSettings, BackendMode, WorkspaceEntry, WorkspaceGroup, WorkspaceKind, WorkspaceSettings,
     };
 
     #[test]
     fn app_settings_defaults_from_empty_json() {
         let settings: AppSettings = serde_json::from_str("{}").expect("settings deserialize");
         assert!(settings.codex_bin.is_none());
-        let expected_backend_mode = if cfg!(target_os = "ios") {
-            BackendMode::Remote
-        } else {
-            BackendMode::Local
-        };
-        assert!(matches!(
-            (&settings.backend_mode, &expected_backend_mode),
-            (BackendMode::Local, BackendMode::Local) | (BackendMode::Remote, BackendMode::Remote)
-        ));
-        assert!(matches!(
-            settings.remote_backend_provider,
-            RemoteBackendProvider::Tcp
-        ));
+        assert!(settings.codex_profiles.is_empty());
+        assert!(settings.active_codex_profile_id.is_none());
+        assert!(matches!(settings.backend_mode, BackendMode::Local));
         assert_eq!(settings.remote_backend_host, "127.0.0.1:4732");
         assert!(settings.remote_backend_token.is_none());
-        assert!(settings.remote_backends.is_empty());
-        assert!(settings.active_remote_backend_id.is_none());
-        assert!(!settings.keep_daemon_running_after_app_close);
         assert_eq!(settings.default_access_mode, "current");
         assert_eq!(settings.review_delivery_mode, "inline");
-        let expected_primary = if cfg!(target_os = "macos") {
-            "cmd"
-        } else {
-            "ctrl"
-        };
-        let expected_model = format!("{expected_primary}+shift+m");
-        let expected_access = format!("{expected_primary}+shift+a");
-        let expected_reasoning = format!("{expected_primary}+shift+r");
-        let expected_toggle_debug = format!("{expected_primary}+shift+d");
-        let expected_toggle_terminal = format!("{expected_primary}+shift+t");
         assert_eq!(
             settings.composer_model_shortcut.as_deref(),
-            Some(expected_model.as_str())
+            Some("cmd+shift+m")
         );
         assert_eq!(
             settings.composer_access_shortcut.as_deref(),
-            Some(expected_access.as_str())
+            Some("cmd+shift+a")
         );
         assert_eq!(
             settings.composer_reasoning_shortcut.as_deref(),
-            Some(expected_reasoning.as_str())
+            Some("cmd+shift+r")
         );
         assert_eq!(
             settings.composer_collaboration_shortcut.as_deref(),
@@ -1250,81 +914,50 @@ mod tests {
         } else {
             "ctrl+shift+c"
         };
-        assert_eq!(
-            settings.interrupt_shortcut.as_deref(),
-            Some(expected_interrupt)
-        );
+        assert_eq!(settings.interrupt_shortcut.as_deref(), Some(expected_interrupt));
         assert_eq!(
             settings.archive_thread_shortcut.as_deref(),
-            Some(if cfg!(target_os = "macos") {
-                "cmd+ctrl+a"
-            } else {
-                "ctrl+alt+a"
-            })
+            Some("cmd+ctrl+a")
         );
         assert_eq!(
             settings.toggle_debug_panel_shortcut.as_deref(),
-            Some(expected_toggle_debug.as_str())
+            Some("cmd+shift+d")
         );
         assert_eq!(
             settings.toggle_terminal_shortcut.as_deref(),
-            Some(expected_toggle_terminal.as_str())
+            Some("cmd+shift+t")
         );
         assert_eq!(
             settings.cycle_agent_next_shortcut.as_deref(),
-            Some(if cfg!(target_os = "macos") {
-                "cmd+ctrl+down"
-            } else {
-                "ctrl+alt+down"
-            })
+            Some("cmd+ctrl+down")
         );
         assert_eq!(
             settings.cycle_agent_prev_shortcut.as_deref(),
-            Some(if cfg!(target_os = "macos") {
-                "cmd+ctrl+up"
-            } else {
-                "ctrl+alt+up"
-            })
+            Some("cmd+ctrl+up")
         );
         assert_eq!(
             settings.cycle_workspace_next_shortcut.as_deref(),
-            Some(if cfg!(target_os = "macos") {
-                "cmd+shift+down"
-            } else {
-                "ctrl+alt+shift+down"
-            })
+            Some("cmd+shift+down")
         );
         assert_eq!(
             settings.cycle_workspace_prev_shortcut.as_deref(),
-            Some(if cfg!(target_os = "macos") {
-                "cmd+shift+up"
-            } else {
-                "ctrl+alt+shift+up"
-            })
+            Some("cmd+shift+up")
         );
         assert!(settings.last_composer_model_id.is_none());
         assert!(settings.last_composer_reasoning_effort.is_none());
         assert!((settings.ui_scale - 1.0).abs() < f64::EPSILON);
         assert_eq!(settings.theme, "system");
         assert!(!settings.usage_show_remaining);
-        assert!(settings.show_message_file_path);
-        assert_eq!(settings.chat_history_scrollback_items, Some(200));
-        assert!(!settings.thread_title_autogeneration_enabled);
-        assert!(settings.ui_font_family.contains("system-ui"));
-        assert!(settings.code_font_family.contains("ui-monospace"));
+        assert!(!settings.auto_switch_on_limit);
+        assert!(settings.ui_font_family.contains("SF Pro Text"));
+        assert!(settings.code_font_family.contains("SF Mono"));
         assert_eq!(settings.code_font_size, 11);
         assert!(settings.notification_sounds_enabled);
         assert!(settings.system_notifications_enabled);
-        assert!(settings.subagent_system_notifications_enabled);
-        assert!(!settings.split_chat_diff_view);
         assert!(settings.preload_git_diffs);
         assert!(!settings.git_diff_ignore_whitespace_changes);
-        assert!(settings.commit_message_prompt.contains("{diff}"));
         assert!(settings.collaboration_modes_enabled);
         assert!(settings.steer_enabled);
-        assert_eq!(settings.follow_up_message_behavior, "queue");
-        assert!(settings.composer_follow_up_hint_enabled);
-        assert!(settings.pause_queued_messages_when_response_required);
         assert!(settings.unified_exec_enabled);
         assert!(!settings.experimental_apps_enabled);
         assert_eq!(settings.personality, "friendly");
@@ -1342,12 +975,7 @@ mod tests {
         assert!(!settings.composer_list_continuation);
         assert!(!settings.composer_code_block_copy_use_modifier);
         assert!(settings.workspace_groups.is_empty());
-        let expected_open_id = if cfg!(target_os = "windows") {
-            "finder"
-        } else {
-            "vscode"
-        };
-        assert_eq!(settings.selected_open_app_id, expected_open_id);
+        assert_eq!(settings.selected_open_app_id, "vscode");
         assert_eq!(settings.open_app_targets.len(), 6);
         assert_eq!(settings.open_app_targets[0].id, "vscode");
     }
@@ -1381,9 +1009,10 @@ mod tests {
 
     #[test]
     fn workspace_entry_defaults_from_minimal_json() {
-        let entry: WorkspaceEntry =
-            serde_json::from_str(r#"{"id":"1","name":"Test","path":"/tmp"}"#)
-                .expect("workspace deserialize");
+        let entry: WorkspaceEntry = serde_json::from_str(
+            r#"{"id":"1","name":"Test","path":"/tmp","codexBin":null}"#,
+        )
+        .expect("workspace deserialize");
         assert!(matches!(entry.kind, WorkspaceKind::Main));
         assert!(entry.parent_id.is_none());
         assert!(entry.worktree.is_none());

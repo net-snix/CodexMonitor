@@ -1,34 +1,13 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import type { DebugEntry } from "../../../types";
 
 const MAX_DEBUG_ENTRIES = 200;
-
-function summarizePayload(payload: unknown): unknown {
-  if (Array.isArray(payload)) {
-    return { _type: "array", count: payload.length, sample: payload.slice(0, 5) };
-  }
-  if (payload && typeof payload === "object") {
-    const obj = payload as Record<string, unknown>;
-    const summarized: Record<string, unknown> = {};
-    for (const key of Object.keys(obj)) {
-      if (Array.isArray(obj[key])) {
-        summarized[key] = { _type: "array", count: (obj[key] as unknown[]).length };
-      } else {
-        summarized[key] = obj[key];
-      }
-    }
-    return summarized;
-  }
-  return payload;
-}
 
 export function useDebugLog() {
   const [debugOpen, setDebugOpenState] = useState(false);
   const [debugEntries, setDebugEntries] = useState<DebugEntry[]>([]);
   const [hasDebugAlerts, setHasDebugAlerts] = useState(false);
   const [debugPinned, setDebugPinned] = useState(false);
-  const debugOpenRef = useRef(debugOpen);
-  debugOpenRef.current = debugOpen;
 
   const isAlertEntry = useCallback((entry: DebugEntry) => {
     if (entry.source === "error" || entry.source === "stderr") {
@@ -45,19 +24,27 @@ export function useDebugLog() {
     return false;
   }, []);
 
+  const shouldStoreEntry = useCallback(
+    (entry: DebugEntry) => {
+      if (debugOpen) {
+        return true;
+      }
+      return isAlertEntry(entry);
+    },
+    [debugOpen, isAlertEntry],
+  );
+
   const addDebugEntry = useCallback(
     (entry: DebugEntry) => {
-      const isAlert = isAlertEntry(entry);
-      if (!debugOpenRef.current && !isAlert) {
+      if (!shouldStoreEntry(entry)) {
         return;
       }
-      if (isAlert) {
+      if (isAlertEntry(entry)) {
         setHasDebugAlerts(true);
       }
-      const compactEntry = { ...entry, payload: summarizePayload(entry.payload) };
-      setDebugEntries((prev) => [...prev, compactEntry].slice(-MAX_DEBUG_ENTRIES));
+      setDebugEntries((prev) => [...prev, entry].slice(-MAX_DEBUG_ENTRIES));
     },
-    [isAlertEntry],
+    [isAlertEntry, shouldStoreEntry],
   );
 
   const handleCopyDebug = useCallback(async () => {

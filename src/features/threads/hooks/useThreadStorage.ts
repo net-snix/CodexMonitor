@@ -14,9 +14,9 @@ import {
   makePinKey,
   savePinnedThreads,
   saveThreadActivity,
-} from "@threads/utils/threadStorage";
+} from "../utils/threadStorage";
 
-type UseThreadStorageResult = {
+export type UseThreadStorageResult = {
   customNamesRef: MutableRefObject<CustomNamesMap>;
   pinnedThreadsRef: MutableRefObject<PinnedThreadsMap>;
   threadActivityRef: MutableRefObject<ThreadActivityMap>;

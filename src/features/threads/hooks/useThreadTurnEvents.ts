@@ -1,101 +1,43 @@
-import { useCallback, useRef } from "react";
+import { useCallback } from "react";
 import type { Dispatch, MutableRefObject } from "react";
-import type { RateLimitSnapshot, TurnPlan } from "@/types";
-import { interruptTurn as interruptTurnService } from "@services/tauri";
-import { getThreadTimestamp } from "@utils/threadItems";
+import type { TurnPlan } from "../../../types";
+import { interruptTurn as interruptTurnService } from "../../../services/tauri";
+import { getThreadTimestamp } from "../../../utils/threadItems";
 import {
   asString,
   normalizePlanUpdate,
   normalizeRateLimits,
   normalizeTokenUsage,
-} from "@threads/utils/threadNormalize";
+} from "../utils/threadNormalize";
 import type { ThreadAction } from "./useThreadsReducer";
 
 type UseThreadTurnEventsOptions = {
   dispatch: Dispatch<ThreadAction>;
   planByThreadRef: MutableRefObject<Record<string, TurnPlan | null>>;
-  getCurrentRateLimits?: (workspaceId: string) => RateLimitSnapshot | null;
   getCustomName: (workspaceId: string, threadId: string) => string | undefined;
   isThreadHidden: (workspaceId: string, threadId: string) => boolean;
   markProcessing: (threadId: string, isProcessing: boolean) => void;
   markReviewing: (threadId: string, isReviewing: boolean) => void;
   setActiveTurnId: (threadId: string, turnId: string | null) => void;
-  getActiveTurnId: (threadId: string) => string | null;
   pendingInterruptsRef: MutableRefObject<Set<string>>;
   pushThreadErrorMessage: (threadId: string, message: string) => void;
   safeMessageActivity: () => void;
   recordThreadActivity: (workspaceId: string, threadId: string, timestamp?: number) => void;
 };
 
-function normalizeThreadStatusType(status: Record<string, unknown>): string {
-  const typeRaw = status.type ?? status.statusType ?? status.status_type;
-  if (typeof typeRaw !== "string") {
-    return "";
-  }
-  return typeRaw
-    .trim()
-    .toLowerCase()
-    .replace(/[\s_-]/g, "");
-}
-
 export function useThreadTurnEvents({
   dispatch,
   planByThreadRef,
-  getCurrentRateLimits,
   getCustomName,
   isThreadHidden,
   markProcessing,
   markReviewing,
   setActiveTurnId,
-  getActiveTurnId,
   pendingInterruptsRef,
   pushThreadErrorMessage,
   safeMessageActivity,
   recordThreadActivity,
 }: UseThreadTurnEventsOptions) {
-  const immediateActiveTurnIdByThreadRef = useRef<Record<string, string | null>>({});
-  const lastReducerActiveTurnIdByThreadRef = useRef<Record<string, string | null>>({});
-  const hasOptimisticActiveTurnByThreadRef = useRef<Record<string, boolean>>({});
-
-  const getLatestKnownActiveTurnId = useCallback(
-    (threadId: string) => {
-      const reducerTurnId = getActiveTurnId(threadId);
-      const lastReducerTurnId = lastReducerActiveTurnIdByThreadRef.current[threadId];
-      const immediateTurnId = immediateActiveTurnIdByThreadRef.current[threadId];
-      const hasOptimisticTurn =
-        hasOptimisticActiveTurnByThreadRef.current[threadId] === true;
-
-      if (hasOptimisticTurn && immediateTurnId !== undefined) {
-        if (reducerTurnId === immediateTurnId) {
-          // Reducer caught up with our optimistic write.
-          hasOptimisticActiveTurnByThreadRef.current[threadId] = false;
-        } else if (
-          lastReducerTurnId !== undefined &&
-          reducerTurnId !== lastReducerTurnId
-        ) {
-          // Reducer changed independently (e.g. resume hydration), so adopt it.
-          hasOptimisticActiveTurnByThreadRef.current[threadId] = false;
-          immediateActiveTurnIdByThreadRef.current[threadId] = reducerTurnId;
-        } else {
-          lastReducerActiveTurnIdByThreadRef.current[threadId] = reducerTurnId;
-          return immediateTurnId;
-        }
-      }
-
-      if (lastReducerTurnId !== reducerTurnId) {
-        // Keep cache aligned with reducer when we are not in an optimistic window.
-        lastReducerActiveTurnIdByThreadRef.current[threadId] = reducerTurnId;
-        immediateActiveTurnIdByThreadRef.current[threadId] = reducerTurnId;
-      }
-
-      if (immediateTurnId !== undefined) {
-        return immediateActiveTurnIdByThreadRef.current[threadId];
-      }
-      return reducerTurnId;
-    },
-    [getActiveTurnId],
-  );
-
   const shouldClearCompletedPlan = useCallback((threadId: string, turnId: string) => {
     const plan = planByThreadRef.current[threadId];
     if (!plan || plan.steps.length === 0) {
@@ -162,44 +104,6 @@ export function useThreadTurnEvents({
     [dispatch, getCustomName],
   );
 
-  const onThreadArchived = useCallback(
-    (workspaceId: string, threadId: string) => {
-      if (!threadId) {
-        return;
-      }
-      dispatch({ type: "removeThread", workspaceId, threadId });
-    },
-    [dispatch],
-  );
-
-  const onThreadUnarchived = useCallback(
-    (workspaceId: string, threadId: string) => {
-      if (!threadId) {
-        return;
-      }
-      dispatch({ type: "ensureThread", workspaceId, threadId });
-      const customName = getCustomName(workspaceId, threadId);
-      if (customName) {
-        dispatch({
-          type: "setThreadName",
-          workspaceId,
-          threadId,
-          name: customName,
-        });
-      }
-      const timestamp = Date.now();
-      dispatch({
-        type: "setThreadTimestamp",
-        workspaceId,
-        threadId,
-        timestamp,
-      });
-      recordThreadActivity(workspaceId, threadId, timestamp);
-      safeMessageActivity();
-    },
-    [dispatch, getCustomName, recordThreadActivity, safeMessageActivity],
-  );
-
   const onTurnStarted = useCallback(
     (workspaceId: string, threadId: string, turnId: string) => {
       dispatch({
@@ -216,25 +120,15 @@ export function useThreadTurnEvents({
       }
       markProcessing(threadId, true);
       if (turnId) {
-        lastReducerActiveTurnIdByThreadRef.current[threadId] =
-          getActiveTurnId(threadId);
-        hasOptimisticActiveTurnByThreadRef.current[threadId] = true;
-        immediateActiveTurnIdByThreadRef.current[threadId] = turnId;
         setActiveTurnId(threadId, turnId);
       }
     },
-    [dispatch, getActiveTurnId, markProcessing, pendingInterruptsRef, setActiveTurnId],
+    [dispatch, markProcessing, pendingInterruptsRef, setActiveTurnId],
   );
 
   const onTurnCompleted = useCallback(
     (_workspaceId: string, threadId: string, turnId: string) => {
-      const activeTurnId = getLatestKnownActiveTurnId(threadId);
-      if (turnId && activeTurnId && turnId !== activeTurnId) {
-        return;
-      }
       markProcessing(threadId, false);
-      hasOptimisticActiveTurnByThreadRef.current[threadId] = false;
-      immediateActiveTurnIdByThreadRef.current[threadId] = null;
       setActiveTurnId(threadId, null);
       pendingInterruptsRef.current.delete(threadId);
       if (shouldClearCompletedPlan(threadId, turnId)) {
@@ -243,37 +137,11 @@ export function useThreadTurnEvents({
     },
     [
       dispatch,
-      getLatestKnownActiveTurnId,
       markProcessing,
       pendingInterruptsRef,
       setActiveTurnId,
       shouldClearCompletedPlan,
     ],
-  );
-
-  const onThreadStatusChanged = useCallback(
-    (_workspaceId: string, threadId: string, status: Record<string, unknown>) => {
-      const statusType = normalizeThreadStatusType(status);
-      if (!statusType) {
-        return;
-      }
-      if (statusType === "active") {
-        markProcessing(threadId, true);
-        return;
-      }
-      if (
-        statusType === "idle" ||
-        statusType === "notloaded" ||
-        statusType === "systemerror"
-      ) {
-        markProcessing(threadId, false);
-        hasOptimisticActiveTurnByThreadRef.current[threadId] = false;
-        immediateActiveTurnIdByThreadRef.current[threadId] = null;
-        setActiveTurnId(threadId, null);
-        pendingInterruptsRef.current.delete(threadId);
-      }
-    },
-    [markProcessing, pendingInterruptsRef, setActiveTurnId],
   );
 
   const onTurnPlanUpdated = useCallback(
@@ -294,20 +162,8 @@ export function useThreadTurnEvents({
     [dispatch],
   );
 
-  const onTurnDiffUpdated = useCallback(
-    (workspaceId: string, threadId: string, diff: string) => {
-      dispatch({ type: "ensureThread", workspaceId, threadId });
-      dispatch({ type: "setThreadTurnDiff", threadId, diff });
-    },
-    [dispatch],
-  );
-
   const onThreadTokenUsageUpdated = useCallback(
-    (
-      workspaceId: string,
-      threadId: string,
-      tokenUsage: Record<string, unknown> | null,
-    ) => {
+    (workspaceId: string, threadId: string, tokenUsage: Record<string, unknown>) => {
       dispatch({ type: "ensureThread", workspaceId, threadId });
       dispatch({
         type: "setThreadTokenUsage",
@@ -320,35 +176,28 @@ export function useThreadTurnEvents({
 
   const onAccountRateLimitsUpdated = useCallback(
     (workspaceId: string, rateLimits: Record<string, unknown>) => {
-      const previousRateLimits = getCurrentRateLimits?.(workspaceId) ?? null;
       dispatch({
         type: "setRateLimits",
         workspaceId,
-        rateLimits: normalizeRateLimits(rateLimits, previousRateLimits),
+        rateLimits: normalizeRateLimits(rateLimits),
       });
     },
-    [dispatch, getCurrentRateLimits],
+    [dispatch],
   );
 
   const onTurnError = useCallback(
     (
       workspaceId: string,
       threadId: string,
-      turnId: string,
+      _turnId: string,
       payload: { message: string; willRetry: boolean },
     ) => {
       if (payload.willRetry) {
         return;
       }
-      const activeTurnId = getLatestKnownActiveTurnId(threadId);
-      if (turnId && activeTurnId && turnId !== activeTurnId) {
-        return;
-      }
       dispatch({ type: "ensureThread", workspaceId, threadId });
       markProcessing(threadId, false);
       markReviewing(threadId, false);
-      hasOptimisticActiveTurnByThreadRef.current[threadId] = false;
-      immediateActiveTurnIdByThreadRef.current[threadId] = null;
       setActiveTurnId(threadId, null);
       const message = payload.message
         ? `Turn failed: ${payload.message}`
@@ -358,7 +207,6 @@ export function useThreadTurnEvents({
     },
     [
       dispatch,
-      getLatestKnownActiveTurnId,
       markProcessing,
       markReviewing,
       pushThreadErrorMessage,
@@ -370,13 +218,9 @@ export function useThreadTurnEvents({
   return {
     onThreadStarted,
     onThreadNameUpdated,
-    onThreadArchived,
-    onThreadUnarchived,
     onTurnStarted,
     onTurnCompleted,
-    onThreadStatusChanged,
     onTurnPlanUpdated,
-    onTurnDiffUpdated,
     onThreadTokenUsageUpdated,
     onAccountRateLimitsUpdated,
     onTurnError,

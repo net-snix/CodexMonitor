@@ -1,6 +1,5 @@
+import { useEffect, useRef } from "react";
 import type { LaunchScriptEntry, LaunchScriptIconId } from "../../../types";
-import { PopoverSurface } from "../../design-system/components/popover/PopoverPrimitives";
-import { useMenuController } from "../hooks/useMenuController";
 import { LaunchScriptIconPicker } from "./LaunchScriptIconPicker";
 import { getLaunchScriptIcon, getLaunchScriptIconLabel } from "../utils/launchScriptIcons";
 
@@ -39,13 +38,26 @@ export function LaunchScriptEntryButton({
   onSave,
   onDelete,
 }: LaunchScriptEntryButtonProps) {
-  const editorMenu = useMenuController({
-    open: editorOpen,
-    onDismiss: onCloseEditor,
-  });
-  const { containerRef: popoverRef } = editorMenu;
+  const popoverRef = useRef<HTMLDivElement | null>(null);
   const Icon = getLaunchScriptIcon(entry.icon);
   const iconLabel = getLaunchScriptIconLabel(entry.icon);
+
+  useEffect(() => {
+    if (!editorOpen) {
+      return;
+    }
+    const handleClick = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (popoverRef.current?.contains(target)) {
+        return;
+      }
+      onCloseEditor();
+    };
+    window.addEventListener("mousedown", handleClick);
+    return () => {
+      window.removeEventListener("mousedown", handleClick);
+    };
+  }, [editorOpen, onCloseEditor]);
 
   return (
     <div className="launch-script-menu" ref={popoverRef}>
@@ -66,7 +78,7 @@ export function LaunchScriptEntryButton({
         </button>
       </div>
       {editorOpen && (
-        <PopoverSurface className="launch-script-popover" role="dialog">
+        <div className="launch-script-popover popover-surface" role="dialog">
           <div className="launch-script-title">
             {entry.label?.trim() || "Launch script"}
           </div>
@@ -115,7 +127,7 @@ export function LaunchScriptEntryButton({
               {isSaving ? "Saving..." : "Save"}
             </button>
           </div>
-        </PopoverSurface>
+        </div>
       )}
     </div>
   );

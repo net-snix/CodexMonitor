@@ -1,16 +1,16 @@
 // @vitest-environment jsdom
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { AppSettings, CodexDoctorResult } from "@/types";
+import type { AppSettings, CodexDoctorResult } from "../../../types";
 import { useAppSettings } from "./useAppSettings";
 import {
   getAppSettings,
   runCodexDoctor,
   updateAppSettings,
-} from "@services/tauri";
-import { UI_SCALE_DEFAULT, UI_SCALE_MAX } from "@utils/uiScale";
+} from "../../../services/tauri";
+import { UI_SCALE_DEFAULT, UI_SCALE_MAX } from "../../../utils/uiScale";
 
-vi.mock("@services/tauri", () => ({
+vi.mock("../../../services/tauri", () => ({
   getAppSettings: vi.fn(),
   updateAppSettings: vi.fn(),
   runCodexDoctor: vi.fn(),
@@ -49,8 +49,8 @@ describe("useAppSettings", () => {
 
     expect(result.current.settings.uiScale).toBe(UI_SCALE_MAX);
     expect(result.current.settings.theme).toBe("system");
-    expect(result.current.settings.uiFontFamily).toContain("system-ui");
-    expect(result.current.settings.codeFontFamily).toContain("ui-monospace");
+    expect(result.current.settings.uiFontFamily).toContain("SF Pro Text");
+    expect(result.current.settings.codeFontFamily).toContain("SF Mono");
     expect(result.current.settings.codeFontSize).toBe(16);
     expect(result.current.settings.personality).toBe("friendly");
     expect(result.current.settings.backendMode).toBe("remote");
@@ -66,8 +66,8 @@ describe("useAppSettings", () => {
 
     expect(result.current.settings.uiScale).toBe(UI_SCALE_DEFAULT);
     expect(result.current.settings.theme).toBe("system");
-    expect(result.current.settings.uiFontFamily).toContain("system-ui");
-    expect(result.current.settings.codeFontFamily).toContain("ui-monospace");
+    expect(result.current.settings.uiFontFamily).toContain("SF Pro Text");
+    expect(result.current.settings.codeFontFamily).toContain("SF Mono");
     expect(result.current.settings.backendMode).toBe("local");
     expect(result.current.settings.dictationModelId).toBe("base");
     expect(result.current.settings.interruptShortcut).toBeTruthy();
@@ -122,8 +122,8 @@ describe("useAppSettings", () => {
       expect.objectContaining({
         theme: "system",
         uiScale: 0.1,
-        uiFontFamily: expect.stringContaining("system-ui"),
-        codeFontFamily: expect.stringContaining("ui-monospace"),
+        uiFontFamily: expect.stringContaining("SF Pro Text"),
+        codeFontFamily: expect.stringContaining("SF Mono"),
         codeFontSize: 9,
         notificationSoundsEnabled: false,
       }),

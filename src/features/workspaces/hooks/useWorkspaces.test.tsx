@@ -1,12 +1,9 @@
 // @vitest-environment jsdom
 import { act, renderHook } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { WorkspaceInfo } from "../../../types";
 import {
   addWorkspace,
-  addWorkspaceFromGitUrl,
-  connectWorkspace as connectWorkspaceService,
-  isWorkspacePathDir,
   listWorkspaces,
   renameWorktree,
   renameWorktreeUpstream,
@@ -20,19 +17,15 @@ vi.mock("../../../services/tauri", () => ({
   renameWorktreeUpstream: vi.fn(),
   addClone: vi.fn(),
   addWorkspace: vi.fn(),
-  addWorkspaceFromGitUrl: vi.fn(),
   addWorktree: vi.fn(),
   connectWorkspace: vi.fn(),
   isWorkspacePathDir: vi.fn(),
-  pickWorkspacePaths: vi.fn(),
+  pickWorkspacePath: vi.fn(),
   removeWorkspace: vi.fn(),
   removeWorktree: vi.fn(),
+  updateWorkspaceCodexBin: vi.fn(),
   updateWorkspaceSettings: vi.fn(),
 }));
-
-beforeEach(() => {
-  vi.clearAllMocks();
-});
 
 const worktree: WorkspaceInfo = {
   id: "wt-1",
@@ -250,140 +243,8 @@ describe("useWorkspaces.addWorkspaceFromPath", () => {
       await result.current.addWorkspaceFromPath("/tmp/repo");
     });
 
-    expect(addWorkspaceMock).toHaveBeenCalledWith("/tmp/repo");
+    expect(addWorkspaceMock).toHaveBeenCalledWith("/tmp/repo", null);
     expect(result.current.workspaces).toHaveLength(1);
     expect(result.current.activeWorkspaceId).toBe("workspace-1");
-  });
-});
-
-describe("useWorkspaces.connectWorkspace", () => {
-  it("marks workspace as connected after a successful connect", async () => {
-    const listWorkspacesMock = vi.mocked(listWorkspaces);
-    const connectWorkspaceMock = vi.mocked(connectWorkspaceService);
-    listWorkspacesMock.mockResolvedValue([
-      {
-        ...workspaceOne,
-        connected: false,
-      },
-    ]);
-    connectWorkspaceMock.mockResolvedValue(undefined);
-
-    const { result } = renderHook(() => useWorkspaces());
-
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    await act(async () => {
-      await result.current.connectWorkspace({
-        ...workspaceOne,
-        connected: false,
-      });
-    });
-
-    expect(connectWorkspaceMock).toHaveBeenCalledWith(workspaceOne.id);
-    expect(
-      result.current.workspaces.find((entry) => entry.id === workspaceOne.id)
-        ?.connected,
-    ).toBe(true);
-  });
-});
-
-describe("useWorkspaces.addWorkspacesFromPaths", () => {
-  it("adds multiple workspaces, activates the first, and returns structured result", async () => {
-    const listWorkspacesMock = vi.mocked(listWorkspaces);
-    const isWorkspacePathDirMock = vi.mocked(isWorkspacePathDir);
-    const addWorkspaceMock = vi.mocked(addWorkspace);
-
-    listWorkspacesMock.mockResolvedValue([]);
-    isWorkspacePathDirMock.mockResolvedValue(true);
-    addWorkspaceMock
-      .mockResolvedValueOnce({ ...workspaceOne, id: "added-1", path: "/tmp/ws-1" })
-      .mockResolvedValueOnce({ ...workspaceTwo, id: "added-2", path: "/tmp/ws-2" });
-
-    const { result } = renderHook(() => useWorkspaces());
-
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    let addResult: Awaited<ReturnType<typeof result.current.addWorkspacesFromPaths>>;
-    await act(async () => {
-      addResult = await result.current.addWorkspacesFromPaths(["/tmp/ws-1", "/tmp/ws-2"]);
-    });
-
-    expect(addWorkspaceMock).toHaveBeenCalledTimes(2);
-    expect(addWorkspaceMock).toHaveBeenCalledWith("/tmp/ws-1");
-    expect(addWorkspaceMock).toHaveBeenCalledWith("/tmp/ws-2");
-    expect(result.current.workspaces).toHaveLength(2);
-    expect(result.current.activeWorkspaceId).toBe("added-1");
-    expect(addResult!.firstAdded?.id).toBe("added-1");
-    expect(addResult!.added).toHaveLength(2);
-    expect(addResult!.skippedExisting).toHaveLength(0);
-    expect(addResult!.skippedInvalid).toHaveLength(0);
-    expect(addResult!.failures).toHaveLength(0);
-  });
-
-  it("returns skipped and failure details without UI side effects", async () => {
-    const listWorkspacesMock = vi.mocked(listWorkspaces);
-    const isWorkspacePathDirMock = vi.mocked(isWorkspacePathDir);
-    const addWorkspaceMock = vi.mocked(addWorkspace);
-
-    listWorkspacesMock.mockResolvedValue([workspaceOne]);
-    isWorkspacePathDirMock.mockImplementation(async (path: string) => path !== "/tmp/not-a-dir");
-    addWorkspaceMock.mockResolvedValue(workspaceTwo);
-
-    const { result } = renderHook(() => useWorkspaces());
-
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    let addResult: Awaited<ReturnType<typeof result.current.addWorkspacesFromPaths>>;
-    await act(async () => {
-      addResult = await result.current.addWorkspacesFromPaths([
-        workspaceOne.path,
-        "/tmp/not-a-dir",
-        workspaceTwo.path,
-      ]);
-    });
-
-    expect(addWorkspaceMock).toHaveBeenCalledTimes(1);
-    expect(addWorkspaceMock).toHaveBeenCalledWith(workspaceTwo.path);
-    expect(addResult!.added).toHaveLength(1);
-    expect(addResult!.firstAdded?.id).toBe(workspaceTwo.id);
-    expect(addResult!.skippedExisting).toEqual([workspaceOne.path]);
-    expect(addResult!.skippedInvalid).toEqual(["/tmp/not-a-dir"]);
-    expect(addResult!.failures).toHaveLength(0);
-  });
-});
-
-
-describe("useWorkspaces.addWorkspaceFromGitUrl", () => {
-  it("invokes service and activates workspace", async () => {
-    vi.mocked(listWorkspaces).mockResolvedValue([]);
-    const added = { ...workspaceOne, id: "from-url", path: "/tmp/from-url" };
-    vi.mocked(addWorkspaceFromGitUrl).mockResolvedValue(added);
-
-    const { result } = renderHook(() => useWorkspaces());
-
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    await act(async () => {
-      await result.current.addWorkspaceFromGitUrl(
-        "https://github.com/org/repo.git",
-        "/tmp",
-        "repo",
-      );
-    });
-
-    expect(addWorkspaceFromGitUrl).toHaveBeenCalledWith(
-      "https://github.com/org/repo.git",
-      "/tmp",
-      "repo",
-    );
-    expect(result.current.activeWorkspace?.id).toBe("from-url");
   });
 });

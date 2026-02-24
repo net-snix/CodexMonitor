@@ -1,25 +1,406 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ask } from "@tauri-apps/plugin-dialog";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { WorkerPoolContextProvider } from "@pierre/diffs/react";
-import GitCommitHorizontal from "lucide-react/dist/esm/icons/git-commit-horizontal";
+import { FileDiff, WorkerPoolContextProvider } from "@pierre/diffs/react";
+import type { FileDiffMetadata } from "@pierre/diffs";
+import { parsePatchFiles } from "@pierre/diffs";
 import RotateCcw from "lucide-react/dist/esm/icons/rotate-ccw";
-import type { ParsedDiffLine } from "../../../utils/diff";
 import { workerFactory } from "../../../utils/diffsWorker";
-import type { PullRequestReviewIntent } from "../../../types";
-import {
-  DIFF_VIEWER_HIGHLIGHTER_OPTIONS,
-} from "../../design-system/diff/diffViewerTheme";
+import type { GitHubPullRequest, GitHubPullRequestComment } from "../../../types";
+import { formatRelativeTime } from "../../../utils/time";
+import { Markdown } from "../../messages/components/Markdown";
 import { ImageDiffCard } from "./ImageDiffCard";
-import { splitPath } from "./GitDiffPanel.utils";
-import { usePullRequestLineSelection } from "../hooks/usePullRequestLineSelection";
-import { DiffCard } from "./GitDiffViewerDiffCard";
-import { PullRequestSummary } from "./GitDiffViewerPullRequestSummary";
-import type {
-  GitDiffViewerItem,
-  GitDiffViewerProps,
-} from "./GitDiffViewer.types";
-import { calculateDiffStats } from "./GitDiffViewer.utils";
+
+type GitDiffViewerItem = {
+  path: string;
+  status: string;
+  diff: string;
+  oldLines?: string[];
+  newLines?: string[];
+  isImage?: boolean;
+  oldImageData?: string | null;
+  newImageData?: string | null;
+  oldImageMime?: string | null;
+  newImageMime?: string | null;
+};
+
+type GitDiffViewerProps = {
+  diffs: GitDiffViewerItem[];
+  selectedPath: string | null;
+  scrollRequestId?: number;
+  isLoading: boolean;
+  error: string | null;
+  diffStyle?: "split" | "unified";
+  ignoreWhitespaceChanges?: boolean;
+  pullRequest?: GitHubPullRequest | null;
+  pullRequestComments?: GitHubPullRequestComment[];
+  pullRequestCommentsLoading?: boolean;
+  pullRequestCommentsError?: string | null;
+  canRevert?: boolean;
+  onRevertFile?: (path: string) => Promise<void> | void;
+  onActivePathChange?: (path: string) => void;
+};
+
+const DIFF_SCROLL_CSS = `
+[data-column-number],
+[data-buffer],
+[data-separator-wrapper],
+[data-annotation-content] {
+  position: static !important;
+}
+
+[data-buffer] {
+  background-image: none !important;
+}
+
+diffs-container,
+[data-diffs],
+[data-diffs-header],
+[data-error-wrapper] {
+  position: relative !important;
+  contain: layout style !important;
+  isolation: isolate !important;
+}
+
+[data-diffs-header],
+[data-diffs],
+[data-error-wrapper] {
+  --diffs-light-bg: rgba(255, 255, 255, 0.35);
+  --diffs-dark-bg: rgba(10, 12, 16, 0.35);
+}
+
+[data-diffs-header][data-theme-type='light'],
+[data-diffs][data-theme-type='light'] {
+  --diffs-bg: rgba(255, 255, 255, 0.35);
+}
+
+[data-diffs-header][data-theme-type='xp'],
+[data-diffs][data-theme-type='xp'] {
+  --diffs-bg: rgba(255, 255, 255, 0.45);
+}
+
+[data-diffs-header][data-theme-type='dark'],
+[data-diffs][data-theme-type='dark'] {
+  --diffs-bg: rgba(10, 12, 16, 0.35);
+}
+
+@media (prefers-color-scheme: dark) {
+  [data-diffs-header]:not([data-theme-type]),
+  [data-diffs]:not([data-theme-type]),
+  [data-diffs-header][data-theme-type='system'],
+  [data-diffs][data-theme-type='system'] {
+    --diffs-bg: rgba(10, 12, 16, 0.35);
+  }
+}
+
+@media (prefers-color-scheme: light) {
+  [data-diffs-header]:not([data-theme-type]),
+  [data-diffs]:not([data-theme-type]),
+  [data-diffs-header][data-theme-type='system'],
+  [data-diffs][data-theme-type='system'] {
+    --diffs-bg: rgba(255, 255, 255, 0.35);
+  }
+}
+`;
+
+function normalizePatchName(name: string) {
+  if (!name) {
+    return name;
+  }
+  return name.replace(/^(?:a|b)\//, "");
+}
+
+type DiffCardProps = {
+  entry: GitDiffViewerItem;
+  isSelected: boolean;
+  diffStyle: "split" | "unified";
+  isLoading: boolean;
+  ignoreWhitespaceChanges: boolean;
+  showRevert: boolean;
+  onRequestRevert?: (path: string) => void;
+};
+
+const DiffCard = memo(function DiffCard({
+  entry,
+  isSelected,
+  diffStyle,
+  isLoading,
+  ignoreWhitespaceChanges,
+  showRevert,
+  onRequestRevert,
+}: DiffCardProps) {
+  const diffOptions = useMemo(
+    () => ({
+      diffStyle,
+      hunkSeparators: "line-info" as const,
+      overflow: "scroll" as const,
+      unsafeCSS: DIFF_SCROLL_CSS,
+      disableFileHeader: true,
+    }),
+    [diffStyle],
+  );
+
+  const fileDiff = useMemo(() => {
+    if (!entry.diff.trim()) {
+      return null;
+    }
+    const patch = parsePatchFiles(entry.diff);
+    const parsed = patch[0]?.files[0];
+    if (!parsed) {
+      return null;
+    }
+    const normalizedName = normalizePatchName(parsed.name || entry.path);
+    const normalizedPrevName = parsed.prevName
+      ? normalizePatchName(parsed.prevName)
+      : undefined;
+    return {
+      ...parsed,
+      name: normalizedName,
+      prevName: normalizedPrevName,
+      oldLines: entry.oldLines,
+      newLines: entry.newLines,
+    } satisfies FileDiffMetadata;
+  }, [entry.diff, entry.newLines, entry.oldLines, entry.path]);
+
+  const placeholder = useMemo(() => {
+    if (isLoading) {
+      return "Loading diff...";
+    }
+    if (ignoreWhitespaceChanges && !entry.diff.trim()) {
+      return "No non-whitespace changes.";
+    }
+    return "Diff unavailable.";
+  }, [entry.diff, ignoreWhitespaceChanges, isLoading]);
+
+  return (
+      <div
+        data-diff-path={entry.path}
+        className={`diff-viewer-item ${isSelected ? "active" : ""}`}
+      >
+      <div className="diff-viewer-header">
+        <span className="diff-viewer-status" data-status={entry.status}>
+          {entry.status}
+        </span>
+        <span className="diff-viewer-path">{entry.path}</span>
+        {showRevert && (
+          <button
+            type="button"
+            className="diff-viewer-header-action diff-viewer-header-action--discard"
+            title="Discard changes in this file"
+            aria-label="Discard changes in this file"
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              onRequestRevert?.(entry.path);
+            }}
+          >
+            <RotateCcw size={14} aria-hidden />
+          </button>
+        )}
+      </div>
+      {entry.diff.trim().length > 0 && fileDiff ? (
+        <div className="diff-viewer-output diff-viewer-output-flat">
+          <FileDiff
+            fileDiff={fileDiff}
+            options={diffOptions}
+            style={{ width: "100%", maxWidth: "100%", minWidth: 0 }}
+          />
+        </div>
+      ) : (
+        <div className="diff-viewer-placeholder">{placeholder}</div>
+      )}
+    </div>
+  );
+});
+
+type PullRequestSummaryProps = {
+  pullRequest: GitHubPullRequest;
+  hasDiffs: boolean;
+  diffStats: { additions: number; deletions: number };
+  onJumpToFirstFile: () => void;
+  pullRequestComments?: GitHubPullRequestComment[];
+  pullRequestCommentsLoading: boolean;
+  pullRequestCommentsError?: string | null;
+};
+
+const PullRequestSummary = memo(function PullRequestSummary({
+  pullRequest,
+  hasDiffs,
+  diffStats,
+  onJumpToFirstFile,
+  pullRequestComments,
+  pullRequestCommentsLoading,
+  pullRequestCommentsError,
+}: PullRequestSummaryProps) {
+  const prUpdatedLabel = pullRequest.updatedAt
+    ? formatRelativeTime(new Date(pullRequest.updatedAt).getTime())
+    : null;
+  const prAuthor = pullRequest.author?.login ?? "unknown";
+  const prBody = pullRequest.body?.trim() ?? "";
+  const [isTimelineExpanded, setIsTimelineExpanded] = useState(false);
+  const sortedComments = useMemo(() => {
+    if (!pullRequestComments?.length) {
+      return [];
+    }
+    return [...pullRequestComments].sort((a, b) => {
+      return (
+        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+      );
+    });
+  }, [pullRequestComments]);
+  const visibleCommentCount = 3;
+  const visibleComments = isTimelineExpanded
+    ? sortedComments
+    : sortedComments.slice(-visibleCommentCount);
+  const hiddenCommentCount = Math.max(
+    0,
+    sortedComments.length - visibleComments.length,
+  );
+
+  useEffect(() => {
+    setIsTimelineExpanded(false);
+  }, [pullRequest.number]);
+
+  return (
+    <section className="diff-viewer-pr" aria-label="Pull request summary">
+      <div className="diff-viewer-pr-header">
+        <div className="diff-viewer-pr-header-row">
+          <div className="diff-viewer-pr-title">
+            <span className="diff-viewer-pr-number">#{pullRequest.number}</span>
+            <span className="diff-viewer-pr-title-text">
+              {pullRequest.title}
+            </span>
+          </div>
+          {hasDiffs && (
+            <button
+              type="button"
+              className="ghost diff-viewer-pr-jump"
+              onClick={onJumpToFirstFile}
+              aria-label="Jump to first file"
+            >
+              <span className="diff-viewer-pr-jump-add">
+                +{diffStats.additions}
+              </span>
+              <span className="diff-viewer-pr-jump-sep">/</span>
+              <span className="diff-viewer-pr-jump-del">
+                -{diffStats.deletions}
+              </span>
+            </button>
+          )}
+        </div>
+        <div className="diff-viewer-pr-meta">
+          <span className="diff-viewer-pr-author">@{prAuthor}</span>
+          {prUpdatedLabel && (
+            <>
+              <span className="diff-viewer-pr-sep">·</span>
+              <span>{prUpdatedLabel}</span>
+            </>
+          )}
+          <span className="diff-viewer-pr-sep">·</span>
+          <span className="diff-viewer-pr-branch">
+            {pullRequest.baseRefName} ← {pullRequest.headRefName}
+          </span>
+          {pullRequest.isDraft && (
+            <span className="diff-viewer-pr-pill">Draft</span>
+          )}
+        </div>
+      </div>
+      <div className="diff-viewer-pr-body">
+        {prBody ? (
+          <Markdown
+            value={prBody}
+            className="diff-viewer-pr-markdown markdown"
+          />
+        ) : (
+          <div className="diff-viewer-pr-empty">No description provided.</div>
+        )}
+      </div>
+      <div className="diff-viewer-pr-timeline">
+        <div className="diff-viewer-pr-timeline-header">
+          <span className="diff-viewer-pr-timeline-title">Activity</span>
+          <span className="diff-viewer-pr-timeline-count">
+            {sortedComments.length} comment
+            {sortedComments.length === 1 ? "" : "s"}
+          </span>
+          {hiddenCommentCount > 0 && (
+            <button
+              type="button"
+              className="ghost diff-viewer-pr-timeline-button"
+              onClick={() => setIsTimelineExpanded(true)}
+            >
+              Show all
+            </button>
+          )}
+          {isTimelineExpanded &&
+            sortedComments.length > visibleCommentCount && (
+              <button
+                type="button"
+                className="ghost diff-viewer-pr-timeline-button"
+                onClick={() => setIsTimelineExpanded(false)}
+              >
+                Collapse
+              </button>
+            )}
+        </div>
+        <div className="diff-viewer-pr-timeline-list">
+          {pullRequestCommentsLoading && (
+            <div className="diff-viewer-pr-timeline-state">
+              Loading comments…
+            </div>
+          )}
+          {pullRequestCommentsError && (
+            <div className="diff-viewer-pr-timeline-state diff-viewer-pr-timeline-error">
+              {pullRequestCommentsError}
+            </div>
+          )}
+          {!pullRequestCommentsLoading &&
+            !pullRequestCommentsError &&
+            !sortedComments.length && (
+              <div className="diff-viewer-pr-timeline-state">
+                No comments yet.
+              </div>
+            )}
+          {hiddenCommentCount > 0 && !isTimelineExpanded && (
+            <div className="diff-viewer-pr-timeline-divider">
+              {hiddenCommentCount} earlier comment
+              {hiddenCommentCount === 1 ? "" : "s"}
+            </div>
+          )}
+          {visibleComments.map((comment) => {
+            const commentAuthor = comment.author?.login ?? "unknown";
+            const commentTime = formatRelativeTime(
+              new Date(comment.createdAt).getTime(),
+            );
+            return (
+              <div key={comment.id} className="diff-viewer-pr-timeline-item">
+                <div className="diff-viewer-pr-timeline-marker" />
+                <div className="diff-viewer-pr-timeline-content">
+                  <div className="diff-viewer-pr-timeline-meta">
+                    <span className="diff-viewer-pr-timeline-author">
+                      @{commentAuthor}
+                    </span>
+                    <span className="diff-viewer-pr-sep">·</span>
+                    <span>{commentTime}</span>
+                  </div>
+                  {comment.body.trim() ? (
+                    <Markdown
+                      value={comment.body}
+                      className="diff-viewer-pr-comment markdown"
+                    />
+                  ) : (
+                    <div className="diff-viewer-pr-timeline-text">
+                      No comment body.
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </section>
+  );
+});
 
 export function GitDiffViewer({
   diffs,
@@ -33,11 +414,6 @@ export function GitDiffViewer({
   pullRequestComments,
   pullRequestCommentsLoading = false,
   pullRequestCommentsError = null,
-  pullRequestReviewActions = [],
-  onRunPullRequestReview,
-  pullRequestReviewLaunching = false,
-  pullRequestReviewThreadId = null,
-  onCheckoutPullRequest,
   canRevert = false,
   onRevertFile,
   onActivePathChange,
@@ -50,31 +426,12 @@ export function GitDiffViewer({
   const onActivePathChangeRef = useRef(onActivePathChange);
   const rowResizeObserversRef = useRef(new Map<Element, ResizeObserver>());
   const rowNodesByPathRef = useRef(new Map<string, HTMLDivElement>());
-
   const hasActivePathHandler = Boolean(onActivePathChange);
-  const interactiveSelectionEnabled = Boolean(
-    pullRequest &&
-      diffStyle === "unified" &&
-      onRunPullRequestReview &&
-      pullRequestReviewActions.length > 0,
-  );
-
-  const {
-    clearSelection,
-    selectLine,
-    startDragSelection,
-    updateDragSelection,
-    finishDragSelection,
-    selectedRangeForPath,
-    buildSelectionRange,
-  } = usePullRequestLineSelection();
-
   const poolOptions = useMemo(() => ({ workerFactory }), []);
   const highlighterOptions = useMemo(
-    () => DIFF_VIEWER_HIGHLIGHTER_OPTIONS,
+    () => ({ theme: { dark: "pierre-dark", light: "pierre-light" } }),
     [],
   );
-
   const indexByPath = useMemo(() => {
     const map = new Map<string, number>();
     diffs.forEach((entry, index) => {
@@ -82,16 +439,13 @@ export function GitDiffViewer({
     });
     return map;
   }, [diffs]);
-
   const rowVirtualizer = useVirtualizer({
     count: diffs.length,
     getScrollElement: () => containerRef.current,
     estimateSize: () => 260,
     overscan: 6,
   });
-
   const virtualItems = rowVirtualizer.getVirtualItems();
-
   const setRowRef = useCallback(
     (path: string) => (node: HTMLDivElement | null) => {
       const prevNode = rowNodesByPathRef.current.get(path);
@@ -119,7 +473,6 @@ export function GitDiffViewer({
     },
     [rowVirtualizer],
   );
-
   const stickyEntry = useMemo(() => {
     if (!diffs.length) {
       return null;
@@ -133,38 +486,7 @@ export function GitDiffViewer({
     return diffs[0];
   }, [diffs, selectedPath, indexByPath]);
 
-  const stickyPathDisplay = useMemo(() => {
-    if (!stickyEntry) {
-      return null;
-    }
-    const stickyPath = stickyEntry.displayPath ?? stickyEntry.path;
-    const { name, dir } = splitPath(stickyPath);
-    return { fileName: name, displayDir: dir ? `${dir}/` : "" };
-  }, [stickyEntry]);
-
   const showRevert = canRevert && Boolean(onRevertFile);
-
-  const handleRunSelectionReview = useCallback(
-    async (
-      intent: PullRequestReviewIntent,
-      entry: GitDiffViewerItem,
-      parsedLines: ParsedDiffLine[],
-    ) => {
-      if (!onRunPullRequestReview) {
-        return;
-      }
-      const selection = buildSelectionRange(entry.path, entry.status, parsedLines);
-      if (!selection) {
-        return;
-      }
-      await onRunPullRequestReview({
-        intent,
-        selection,
-      });
-    },
-    [buildSelectionRange, onRunPullRequestReview],
-  );
-
   const handleRequestRevert = useCallback(
     async (path: string) => {
       if (!onRevertFile) {
@@ -211,16 +533,6 @@ export function GitDiffViewer({
   useEffect(() => {
     activePathRef.current = selectedPath;
   }, [selectedPath]);
-
-  useEffect(() => {
-    if (!interactiveSelectionEnabled) {
-      clearSelection();
-    }
-  }, [clearSelection, interactiveSelectionEnabled]);
-
-  useEffect(() => {
-    clearSelection();
-  }, [clearSelection, pullRequest?.number]);
 
   useEffect(() => {
     onActivePathChangeRef.current = onActivePathChange;
@@ -286,8 +598,34 @@ export function GitDiffViewer({
     };
   }, [diffs, rowVirtualizer, hasActivePathHandler]);
 
-  const diffStats = useMemo(() => calculateDiffStats(diffs), [diffs]);
-
+  const diffStats = useMemo(() => {
+    let additions = 0;
+    let deletions = 0;
+    for (const entry of diffs) {
+      const lines = entry.diff.split("\n");
+      for (const line of lines) {
+        if (!line) {
+          continue;
+        }
+        if (
+          line.startsWith("+++")
+          || line.startsWith("---")
+          || line.startsWith("diff --git")
+          || line.startsWith("@@")
+          || line.startsWith("index ")
+          || line.startsWith("\\ No newline")
+        ) {
+          continue;
+        }
+        if (line.startsWith("+")) {
+          additions += 1;
+        } else if (line.startsWith("-")) {
+          deletions += 1;
+        }
+      }
+    }
+    return { additions, deletions };
+  }, [diffs]);
   const handleScrollToFirstFile = useCallback(() => {
     if (!diffs.length) {
       return;
@@ -302,29 +640,12 @@ export function GitDiffViewer({
     rowVirtualizer.scrollToIndex(0, { align: "start" });
   }, [diffs.length, rowVirtualizer]);
 
-  const emptyStateCopy = pullRequest
-    ? {
-        title: "No file changes in this pull request",
-        subtitle:
-          "The pull request loaded, but there are no diff hunks to render for this selection.",
-        hint: "Try switching to another pull request or commit from the Git panel.",
-      }
-    : {
-        title: "Working tree is clean",
-        subtitle: "No local changes were detected for the current workspace.",
-        hint: "Make an edit, stage a file, or select a commit to inspect changes here.",
-      };
-
   return (
     <WorkerPoolContextProvider
       poolOptions={poolOptions}
       highlighterOptions={highlighterOptions}
     >
-      <div
-        className="diff-viewer ds-diff-viewer"
-        ref={containerRef}
-        onMouseUp={finishDragSelection}
-      >
+      <div className="diff-viewer" ref={containerRef}>
         {pullRequest && (
           <PullRequestSummary
             pullRequest={pullRequest}
@@ -334,7 +655,6 @@ export function GitDiffViewer({
             pullRequestComments={pullRequestComments}
             pullRequestCommentsLoading={pullRequestCommentsLoading}
             pullRequestCommentsError={pullRequestCommentsError}
-            onCheckoutPullRequest={onCheckoutPullRequest}
           />
         )}
         {!error && stickyEntry && (
@@ -346,17 +666,7 @@ export function GitDiffViewer({
               >
                 {stickyEntry.status}
               </span>
-              <span
-                className="diff-viewer-path"
-                title={stickyEntry.displayPath ?? stickyEntry.path}
-              >
-                <span className="diff-viewer-name">
-                  {stickyPathDisplay?.fileName ?? stickyEntry.path}
-                </span>
-                {stickyPathDisplay?.displayDir && (
-                  <span className="diff-viewer-dir">{stickyPathDisplay.displayDir}</span>
-                )}
-              </span>
+              <span className="diff-viewer-path">{stickyEntry.path}</span>
               {showRevert && (
                 <button
                   type="button"
@@ -366,9 +676,7 @@ export function GitDiffViewer({
                   onClick={(event) => {
                     event.preventDefault();
                     event.stopPropagation();
-                    void handleRequestRevert(
-                      stickyEntry.displayPath ?? stickyEntry.path,
-                    );
+                    void handleRequestRevert(stickyEntry.path);
                   }}
                 >
                   <RotateCcw size={14} aria-hidden />
@@ -384,15 +692,7 @@ export function GitDiffViewer({
           </div>
         )}
         {!error && !isLoading && !diffs.length && (
-          <div className="diff-viewer-empty-state" role="status" aria-live="polite">
-            <div className="diff-viewer-empty-glow" aria-hidden />
-            <span className="diff-viewer-empty-icon" aria-hidden>
-              <GitCommitHorizontal size={18} />
-            </span>
-            <h3 className="diff-viewer-empty-title">{emptyStateCopy.title}</h3>
-            <p className="diff-viewer-empty-subtitle">{emptyStateCopy.subtitle}</p>
-            <p className="diff-viewer-empty-hint">{emptyStateCopy.hint}</p>
-          </div>
+          <div className="diff-viewer-empty">No changes detected.</div>
         )}
         {!error && diffs.length > 0 && (
           <div
@@ -435,28 +735,6 @@ export function GitDiffViewer({
                       ignoreWhitespaceChanges={ignoreWhitespaceChanges}
                       showRevert={showRevert}
                       onRequestRevert={(path) => void handleRequestRevert(path)}
-                      interactiveSelectionEnabled={interactiveSelectionEnabled}
-                      selectedRange={selectedRangeForPath(entry.path)}
-                      onLineSelect={(index, shiftKey) => {
-                        selectLine(entry.path, index, shiftKey);
-                      }}
-                      onLineMouseDown={(index, button, shiftKey) => {
-                        if (button !== 0) {
-                          return;
-                        }
-                        startDragSelection(entry.path, index, shiftKey);
-                      }}
-                      onLineMouseEnter={(index) => {
-                        updateDragSelection(entry.path, index);
-                      }}
-                      onLineMouseUp={finishDragSelection}
-                      reviewActions={pullRequestReviewActions}
-                      onRunReviewAction={(intent, parsedLines) => {
-                        void handleRunSelectionReview(intent, entry, parsedLines);
-                      }}
-                      onClearSelection={clearSelection}
-                      pullRequestReviewLaunching={pullRequestReviewLaunching}
-                      pullRequestReviewThreadId={pullRequestReviewThreadId}
                     />
                   )}
                 </div>

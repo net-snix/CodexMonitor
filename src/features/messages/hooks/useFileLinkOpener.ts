@@ -4,15 +4,9 @@ import { Menu, MenuItem, PredefinedMenuItem } from "@tauri-apps/api/menu";
 import { LogicalPosition } from "@tauri-apps/api/dpi";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
-import * as Sentry from "@sentry/react";
 import { openWorkspaceIn } from "../../../services/tauri";
 import { pushErrorToast } from "../../../services/toasts";
 import type { OpenAppTarget } from "../../../types";
-import {
-  isAbsolutePath,
-  joinWorkspacePath,
-  revealInFileManagerLabel,
-} from "../../../utils/platformPaths";
 
 type OpenTarget = {
   id: string;
@@ -49,15 +43,30 @@ function resolveFilePath(path: string, workspacePath?: string | null) {
   if (!workspacePath) {
     return trimmed;
   }
-  if (isAbsolutePath(trimmed)) {
+  if (trimmed.startsWith("/") || trimmed.startsWith("~/")) {
     return trimmed;
   }
-  return joinWorkspacePath(workspacePath, trimmed);
+  const base = workspacePath.replace(/\/+$/, "");
+  return `${base}/${trimmed}`;
 }
 
 function stripLineSuffix(path: string) {
   const match = path.match(/^(.*?)(?::\d+(?::\d+)?)?$/);
   return match ? match[1] : path;
+}
+
+function revealLabel() {
+  const platform =
+    (navigator as Navigator & { userAgentData?: { platform?: string } })
+      .userAgentData?.platform ?? navigator.platform ?? "";
+  const normalized = platform.toLowerCase();
+  if (normalized.includes("mac")) {
+    return "Reveal in Finder";
+  }
+  if (normalized.includes("win")) {
+    return "Show in Explorer";
+  }
+  return "Reveal in File Manager";
 }
 
 export function useFileLinkOpener(
@@ -68,15 +77,6 @@ export function useFileLinkOpener(
   const reportOpenError = useCallback(
     (error: unknown, context: Record<string, string | null>) => {
       const message = error instanceof Error ? error.message : String(error);
-      Sentry.captureException(
-        error instanceof Error ? error : new Error(message),
-        {
-          tags: {
-            feature: "file-link-open",
-          },
-          extra: context,
-        },
-      );
       pushErrorToast({
         title: "Couldn’t open file",
         message,
@@ -154,7 +154,7 @@ export function useFileLinkOpener(
       const canOpen = canOpenTarget(target);
       const openLabel =
         target.kind === "finder"
-          ? revealInFileManagerLabel()
+          ? revealLabel()
           : target.kind === "command"
             ? command
               ? `Open in ${target.label}`
@@ -174,7 +174,7 @@ export function useFileLinkOpener(
           ? []
           : [
               await MenuItem.new({
-                text: revealInFileManagerLabel(),
+                text: revealLabel(),
                 action: async () => {
                   try {
                     await revealItemInDir(resolvedPath);

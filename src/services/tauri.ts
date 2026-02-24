@@ -1,18 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
-import { open, save } from "@tauri-apps/plugin-dialog";
+import { open } from "@tauri-apps/plugin-dialog";
 import type { Options as NotificationOptions } from "@tauri-apps/plugin-notification";
 import type {
   AppSettings,
-  CodexUpdateResult,
   CodexDoctorResult,
   DictationModelStatus,
   DictationSessionState,
   LocalUsageSnapshot,
-  TcpDaemonStatus,
-  TailscaleDaemonCommandPreview,
-  TailscaleStatus,
   WorkspaceInfo,
-  AppMention,
   WorkspaceSettings,
 } from "../types";
 import type {
@@ -43,14 +38,6 @@ export async function pickWorkspacePath(): Promise<string | null> {
   return selection;
 }
 
-export async function pickWorkspacePaths(): Promise<string[]> {
-  const selection = await open({ directory: true, multiple: true });
-  if (!selection) {
-    return [];
-  }
-  return Array.isArray(selection) ? selection : [selection];
-}
-
 export async function pickImageFiles(): Promise<string[]> {
   const selection = await open({
     multiple: true,
@@ -65,27 +52,6 @@ export async function pickImageFiles(): Promise<string[]> {
     return [];
   }
   return Array.isArray(selection) ? selection : [selection];
-}
-
-export async function exportMarkdownFile(
-  content: string,
-  defaultFileName = "plan.md",
-): Promise<string | null> {
-  const selection = await save({
-    title: "Export plan as Markdown",
-    defaultPath: defaultFileName,
-    filters: [
-      {
-        name: "Markdown",
-        extensions: ["md"],
-      },
-    ],
-  });
-  if (!selection) {
-    return null;
-  }
-  await invoke("write_text_file", { path: selection, content });
-  return selection;
 }
 
 export async function listWorkspaces(): Promise<WorkspaceInfo[]> {
@@ -115,51 +81,6 @@ export type TextFileResponse = {
 export type GlobalAgentsResponse = TextFileResponse;
 export type GlobalCodexConfigResponse = TextFileResponse;
 export type AgentMdResponse = TextFileResponse;
-export type AgentSummary = {
-  name: string;
-  description: string | null;
-  developerInstructions: string | null;
-  configFile: string;
-  resolvedPath: string;
-  managedByApp: boolean;
-  fileExists: boolean;
-};
-
-export type AgentsSettings = {
-  configPath: string;
-  multiAgentEnabled: boolean;
-  maxThreads: number;
-  maxDepth: number;
-  agents: AgentSummary[];
-};
-
-export type SetAgentsCoreInput = {
-  multiAgentEnabled: boolean;
-  maxThreads: number;
-  maxDepth: number;
-};
-
-export type CreateAgentInput = {
-  name: string;
-  description?: string | null;
-  developerInstructions?: string | null;
-  template?: "blank" | string | null;
-  model?: string | null;
-  reasoningEffort?: string | null;
-};
-
-export type UpdateAgentInput = {
-  originalName: string;
-  name: string;
-  description?: string | null;
-  developerInstructions?: string | null;
-  renameManagedFile?: boolean;
-};
-
-export type DeleteAgentInput = {
-  name: string;
-  deleteManagedFile?: boolean;
-};
 
 type FileScope = "workspace" | "global";
 type FileKind = "agents" | "config";
@@ -181,10 +102,6 @@ async function fileWrite(
   return invoke("file_write", { scope, kind, workspaceId, content });
 }
 
-export async function readImageAsDataUrl(path: string): Promise<string> {
-  return invoke<string>("read_image_as_data_url", { path });
-}
-
 export async function readGlobalAgentsMd(): Promise<GlobalAgentsResponse> {
   return fileRead("global", "agents");
 }
@@ -201,39 +118,6 @@ export async function writeGlobalCodexConfigToml(content: string): Promise<void>
   return fileWrite("global", "config", content);
 }
 
-export async function getAgentsSettings(): Promise<AgentsSettings> {
-  return invoke<AgentsSettings>("get_agents_settings");
-}
-
-export async function setAgentsCoreSettings(
-  input: SetAgentsCoreInput,
-): Promise<AgentsSettings> {
-  return invoke<AgentsSettings>("set_agents_core_settings", { input });
-}
-
-export async function createAgent(input: CreateAgentInput): Promise<AgentsSettings> {
-  return invoke<AgentsSettings>("create_agent", { input });
-}
-
-export async function updateAgent(input: UpdateAgentInput): Promise<AgentsSettings> {
-  return invoke<AgentsSettings>("update_agent", { input });
-}
-
-export async function deleteAgent(input: DeleteAgentInput): Promise<AgentsSettings> {
-  return invoke<AgentsSettings>("delete_agent", { input });
-}
-
-export async function readAgentConfigToml(agentName: string): Promise<string> {
-  return invoke<string>("read_agent_config_toml", { agentName });
-}
-
-export async function writeAgentConfigToml(
-  agentName: string,
-  content: string,
-): Promise<void> {
-  return invoke("write_agent_config_toml", { agentName, content });
-}
-
 export async function getConfigModel(workspaceId: string): Promise<string | null> {
   const response = await invoke<{ model?: string | null }>("get_config_model", {
     workspaceId,
@@ -246,20 +130,11 @@ export async function getConfigModel(workspaceId: string): Promise<string | null
   return trimmed.length > 0 ? trimmed : null;
 }
 
-export async function addWorkspace(path: string): Promise<WorkspaceInfo> {
-  return invoke<WorkspaceInfo>("add_workspace", { path });
-}
-
-export async function addWorkspaceFromGitUrl(
-  url: string,
-  destinationPath: string,
-  targetFolderName: string | null,
+export async function addWorkspace(
+  path: string,
+  codex_bin: string | null,
 ): Promise<WorkspaceInfo> {
-  return invoke<WorkspaceInfo>("add_workspace_from_git_url", {
-    url,
-    destinationPath,
-    targetFolderName,
-  });
+  return invoke<WorkspaceInfo>("add_workspace", { path, codex_bin });
 }
 
 export async function isWorkspacePathDir(path: string): Promise<boolean> {
@@ -307,6 +182,13 @@ export async function updateWorkspaceSettings(
   settings: WorkspaceSettings,
 ): Promise<WorkspaceInfo> {
   return invoke<WorkspaceInfo>("update_workspace_settings", { id, settings });
+}
+
+export async function updateWorkspaceCodexBin(
+  id: string,
+  codex_bin: string | null,
+): Promise<WorkspaceInfo> {
+  return invoke<WorkspaceInfo>("update_workspace_codex_bin", { id, codex_bin });
 }
 
 export async function removeWorkspace(id: string): Promise<void> {
@@ -360,16 +242,6 @@ export async function connectWorkspace(id: string): Promise<void> {
   return invoke("connect_workspace", { id });
 }
 
-export async function setWorkspaceRuntimeCodexArgs(
-  workspaceId: string,
-  codexArgs: string | null,
-): Promise<{ appliedCodexArgs: string | null; respawned: boolean }> {
-  return invoke("set_workspace_runtime_codex_args", {
-    workspaceId,
-    codexArgs,
-  });
-}
-
 export async function startThread(workspaceId: string) {
   return invoke<any>("start_thread", { workspaceId });
 }
@@ -382,52 +254,6 @@ export async function compactThread(workspaceId: string, threadId: string) {
   return invoke<any>("compact_thread", { workspaceId, threadId });
 }
 
-function isInlineImageUrl(image: string) {
-  return (
-    image.startsWith("data:") ||
-    image.startsWith("http://") ||
-    image.startsWith("https://")
-  );
-}
-
-async function convertImagesToDataUrls(images: string[]): Promise<string[]> {
-  return Promise.all(
-    images.map(async (image) => {
-      if (isInlineImageUrl(image)) {
-        return image;
-      }
-      return readImageAsDataUrl(image);
-    }),
-  );
-}
-
-async function normalizeImagesForRpc(images?: string[]): Promise<string[] | null> {
-  if (images == null) {
-    return null;
-  }
-  if (images.length === 0) {
-    return [];
-  }
-  const hasPathImages = images.some((image) => !isInlineImageUrl(image));
-  if (!hasPathImages) {
-    return images;
-  }
-  let settings: AppSettings;
-  let mobileRuntime: boolean;
-  try {
-    [settings, mobileRuntime] = await Promise.all([getAppSettings(), isMobileRuntime()]);
-  } catch (error) {
-    if (isMissingTauriInvokeError(error)) {
-      return images;
-    }
-    throw error;
-  }
-  if (settings.backendMode !== "remote" && !mobileRuntime) {
-    return images;
-  }
-  return convertImagesToDataUrls(images);
-}
-
 export async function sendUserMessage(
   workspaceId: string,
   threadId: string,
@@ -438,10 +264,8 @@ export async function sendUserMessage(
     accessMode?: "read-only" | "current" | "full-access";
     images?: string[];
     collaborationMode?: Record<string, unknown> | null;
-    appMentions?: AppMention[];
   },
 ) {
-  const images = await normalizeImagesForRpc(options?.images);
   const payload: Record<string, unknown> = {
     workspaceId,
     threadId,
@@ -449,13 +273,10 @@ export async function sendUserMessage(
     model: options?.model ?? null,
     effort: options?.effort ?? null,
     accessMode: options?.accessMode ?? null,
-    images,
+    images: options?.images ?? null,
   };
   if (options?.collaborationMode) {
     payload.collaborationMode = options.collaborationMode;
-  }
-  if (options?.appMentions && options.appMentions.length > 0) {
-    payload.appMentions = options.appMentions;
   }
   return invoke("send_user_message", payload);
 }
@@ -466,28 +287,6 @@ export async function interruptTurn(
   turnId: string,
 ) {
   return invoke("turn_interrupt", { workspaceId, threadId, turnId });
-}
-
-export async function steerTurn(
-  workspaceId: string,
-  threadId: string,
-  turnId: string,
-  text: string,
-  images?: string[],
-  appMentions?: AppMention[],
-) {
-  const normalizedImages = await normalizeImagesForRpc(images);
-  const payload: Record<string, unknown> = {
-    workspaceId,
-    threadId,
-    turnId,
-    text,
-    images: normalizedImages,
-  };
-  if (appMentions && appMentions.length > 0) {
-    payload.appMentions = appMentions;
-  }
-  return invoke("turn_steer", payload);
 }
 
 export async function startReview(
@@ -543,43 +342,6 @@ export async function getGitStatus(workspace_id: string): Promise<{
   totalDeletions: number;
 }> {
   return invoke("get_git_status", { workspaceId: workspace_id });
-}
-
-export type InitGitRepoResponse =
-  | { status: "initialized"; commitError?: string }
-  | { status: "already_initialized" }
-  | { status: "needs_confirmation"; entryCount: number };
-
-export async function initGitRepo(
-  workspaceId: string,
-  branch: string,
-  force = false,
-): Promise<InitGitRepoResponse> {
-  return invoke<InitGitRepoResponse>("init_git_repo", { workspaceId, branch, force });
-}
-
-export type CreateGitHubRepoResponse =
-  | { status: "ok"; repo: string; remoteUrl?: string | null }
-  | {
-      status: "partial";
-      repo: string;
-      remoteUrl?: string | null;
-      pushError?: string | null;
-      defaultBranchError?: string | null;
-    };
-
-export async function createGitHubRepo(
-  workspaceId: string,
-  repo: string,
-  visibility: "private" | "public",
-  branch?: string | null,
-): Promise<CreateGitHubRepoResponse> {
-  return invoke<CreateGitHubRepoResponse>("create_github_repo", {
-    workspaceId,
-    repo,
-    visibility,
-    branch,
-  });
 }
 
 export async function listGitRoots(
@@ -688,16 +450,6 @@ export async function getGitHubPullRequestComments(
   });
 }
 
-export async function checkoutGitHubPullRequest(
-  workspace_id: string,
-  prNumber: number,
-): Promise<void> {
-  return invoke("checkout_github_pull_request", {
-    workspaceId: workspace_id,
-    prNumber,
-  });
-}
-
 export async function localUsageSnapshot(
   days?: number,
   workspacePath?: string | null,
@@ -711,21 +463,6 @@ export async function localUsageSnapshot(
 
 export async function getModelList(workspaceId: string) {
   return invoke<any>("model_list", { workspaceId });
-}
-
-export async function getExperimentalFeatureList(
-  workspaceId: string,
-  cursor?: string | null,
-  limit?: number | null,
-) {
-  return invoke<any>("experimental_feature_list", { workspaceId, cursor, limit });
-}
-
-export async function setCodexFeatureFlag(
-  featureKey: string,
-  enabled: boolean,
-): Promise<void> {
-  return invoke("set_codex_feature_flag", { featureKey, enabled });
 }
 
 export async function generateRunMetadata(workspaceId: string, prompt: string) {
@@ -745,6 +482,38 @@ export async function getAccountRateLimits(workspaceId: string) {
 
 export async function getAccountInfo(workspaceId: string) {
   return invoke<any>("account_read", { workspaceId });
+}
+
+export async function readCodexAuthStore(): Promise<string | null> {
+  const response = await invoke<{ store?: string | null }>("codex_auth_store_read");
+  const store = response?.store;
+  if (typeof store !== "string") {
+    return null;
+  }
+  const trimmed = store.trim();
+  return trimmed.length ? trimmed : null;
+}
+
+export async function setCodexAuthStoreFile(): Promise<void> {
+  await invoke("codex_auth_store_set_file");
+}
+
+export async function snapshotAuthProfile(profileId: string) {
+  return invoke<{ ok: boolean; missing?: boolean }>(
+    "codex_auth_profile_snapshot",
+    { profileId },
+  );
+}
+
+export async function applyAuthProfile(profileId: string) {
+  return invoke<{ ok: boolean; missing?: boolean }>(
+    "codex_auth_profile_apply",
+    { profileId },
+  );
+}
+
+export async function respawnSessions() {
+  return invoke<{ ok: boolean }>("respawn_sessions", {});
 }
 
 export async function runCodexLogin(workspaceId: string) {
@@ -768,9 +537,8 @@ export async function getAppsList(
   workspaceId: string,
   cursor?: string | null,
   limit?: number | null,
-  threadId?: string | null,
 ) {
-  return invoke<any>("apps_list", { workspaceId, cursor, limit, threadId });
+  return invoke<any>("apps_list", { workspaceId, cursor, limit });
 }
 
 export async function getPromptsList(workspaceId: string) {
@@ -844,32 +612,8 @@ export async function getAppSettings(): Promise<AppSettings> {
   return invoke<AppSettings>("get_app_settings");
 }
 
-export async function isMobileRuntime(): Promise<boolean> {
-  return invoke<boolean>("is_mobile_runtime");
-}
-
 export async function updateAppSettings(settings: AppSettings): Promise<AppSettings> {
   return invoke<AppSettings>("update_app_settings", { settings });
-}
-
-export async function tailscaleStatus(): Promise<TailscaleStatus> {
-  return invoke<TailscaleStatus>("tailscale_status");
-}
-
-export async function tailscaleDaemonCommandPreview(): Promise<TailscaleDaemonCommandPreview> {
-  return invoke<TailscaleDaemonCommandPreview>("tailscale_daemon_command_preview");
-}
-
-export async function tailscaleDaemonStart(): Promise<TcpDaemonStatus> {
-  return invoke<TcpDaemonStatus>("tailscale_daemon_start");
-}
-
-export async function tailscaleDaemonStop(): Promise<TcpDaemonStatus> {
-  return invoke<TcpDaemonStatus>("tailscale_daemon_stop");
-}
-
-export async function tailscaleDaemonStatus(): Promise<TcpDaemonStatus> {
-  return invoke<TcpDaemonStatus>("tailscale_daemon_status");
 }
 
 type MenuAcceleratorUpdate = {
@@ -888,13 +632,6 @@ export async function runCodexDoctor(
   codexArgs: string | null,
 ): Promise<CodexDoctorResult> {
   return invoke<CodexDoctorResult>("codex_doctor", { codexBin, codexArgs });
-}
-
-export async function runCodexUpdate(
-  codexBin: string | null,
-  codexArgs: string | null,
-): Promise<CodexUpdateResult> {
-  return invoke<CodexUpdateResult>("codex_update", { codexBin, codexArgs });
 }
 
 export async function getWorkspaceFiles(workspaceId: string) {
@@ -1026,9 +763,8 @@ export async function listThreads(
   workspaceId: string,
   cursor?: string | null,
   limit?: number | null,
-  sortKey?: "created_at" | "updated_at" | null,
 ) {
-  return invoke<any>("list_threads", { workspaceId, cursor, limit, sortKey });
+  return invoke<any>("list_threads", { workspaceId, cursor, limit });
 }
 
 export async function listMcpServerStatus(
@@ -1043,14 +779,6 @@ export async function resumeThread(workspaceId: string, threadId: string) {
   return invoke<any>("resume_thread", { workspaceId, threadId });
 }
 
-export async function threadLiveSubscribe(workspaceId: string, threadId: string) {
-  return invoke<any>("thread_live_subscribe", { workspaceId, threadId });
-}
-
-export async function threadLiveUnsubscribe(workspaceId: string, threadId: string) {
-  return invoke<any>("thread_live_unsubscribe", { workspaceId, threadId });
-}
-
 export async function archiveThread(workspaceId: string, threadId: string) {
   return invoke<any>("archive_thread", { workspaceId, threadId });
 }
@@ -1063,29 +791,16 @@ export async function setThreadName(
   return invoke<any>("set_thread_name", { workspaceId, threadId, name });
 }
 
+export async function getCommitMessagePrompt(
+  workspaceId: string,
+): Promise<string> {
+  return invoke("get_commit_message_prompt", { workspaceId });
+}
+
 export async function generateCommitMessage(
   workspaceId: string,
-  commitMessageModelId: string | null,
 ): Promise<string> {
-  return invoke("generate_commit_message", { workspaceId, commitMessageModelId });
-}
-
-export type GeneratedAgentConfiguration = {
-  description: string;
-  developerInstructions: string;
-};
-
-export async function generateAgentDescription(
-  workspaceId: string,
-  description: string,
-): Promise<GeneratedAgentConfiguration> {
-  return invoke("generate_agent_description", { workspaceId, description });
-}
-
-export type AppBuildType = "debug" | "release";
-
-export async function getAppBuildType(): Promise<AppBuildType> {
-  return invoke<AppBuildType>("app_build_type");
+  return invoke("generate_commit_message", { workspaceId });
 }
 
 export async function sendNotification(

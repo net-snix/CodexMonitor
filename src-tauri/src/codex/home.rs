@@ -1,13 +1,38 @@
 use std::env;
 use std::path::PathBuf;
 
-use crate::types::WorkspaceEntry;
+use crate::types::{AppSettings, WorkspaceEntry};
 
-pub(crate) fn resolve_workspace_codex_home(
-    _entry: &WorkspaceEntry,
-    _parent_entry: Option<&WorkspaceEntry>,
+pub(crate) fn resolve_workspace_codex_home_with_settings(
+    entry: &WorkspaceEntry,
+    parent_entry: Option<&WorkspaceEntry>,
+    settings: Option<&AppSettings>,
 ) -> Option<PathBuf> {
-    resolve_default_codex_home()
+    if let Some(value) = entry.settings.codex_home.as_ref() {
+        let base = PathBuf::from(&entry.path);
+        if let Some(path) = normalize_codex_home_with_base(value, &base) {
+            return Some(path);
+        }
+    }
+    if entry.kind.is_worktree() {
+        if let Some(parent) = parent_entry {
+            if let Some(value) = parent.settings.codex_home.as_ref() {
+                let base = PathBuf::from(&parent.path);
+                if let Some(path) = normalize_codex_home_with_base(value, &base) {
+                    return Some(path);
+                }
+            }
+            let legacy_home = PathBuf::from(&parent.path).join(".codexmonitor");
+            if legacy_home.is_dir() {
+                return Some(legacy_home);
+            }
+        }
+    }
+    let legacy_home = PathBuf::from(&entry.path).join(".codexmonitor");
+    if legacy_home.is_dir() {
+        return Some(legacy_home);
+    }
+    resolve_default_codex_home_with_settings(settings)
 }
 
 pub(crate) fn resolve_default_codex_home() -> Option<PathBuf> {
@@ -19,7 +44,14 @@ pub(crate) fn resolve_default_codex_home() -> Option<PathBuf> {
     resolve_home_dir().map(|home| home.join(".codex"))
 }
 
-fn normalize_codex_home(value: &str) -> Option<PathBuf> {
+pub(crate) fn resolve_default_codex_home_with_settings(
+    settings: Option<&AppSettings>,
+) -> Option<PathBuf> {
+    let _ = settings;
+    resolve_default_codex_home()
+}
+
+pub(crate) fn normalize_codex_home(value: &str) -> Option<PathBuf> {
     let trimmed = value.trim();
     if trimmed.is_empty() {
         return None;
@@ -35,6 +67,15 @@ fn normalize_codex_home(value: &str) -> Option<PathBuf> {
         return Some(path);
     }
     Some(PathBuf::from(trimmed))
+}
+
+fn normalize_codex_home_with_base(value: &str, base: &PathBuf) -> Option<PathBuf> {
+    let path = normalize_codex_home(value)?;
+    if path.is_absolute() {
+        Some(path)
+    } else {
+        Some(base.join(path))
+    }
 }
 
 fn expand_tilde(value: &str) -> Option<PathBuf> {
@@ -154,12 +195,16 @@ fn resolve_home_dir() -> Option<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{WorkspaceKind, WorkspaceSettings, WorktreeInfo};
+    use crate::types::{AppSettings, CodexProfile, WorkspaceKind, WorkspaceSettings, WorktreeInfo};
     use std::sync::Mutex;
 
     static ENV_LOCK: Mutex<()> = Mutex::new(());
 
-    fn workspace_entry(kind: WorkspaceKind, path: &str) -> WorkspaceEntry {
+    fn workspace_entry(
+        kind: WorkspaceKind,
+        path: &str,
+        codex_home: Option<&str>,
+    ) -> WorkspaceEntry {
         let worktree = if kind.is_worktree() {
             Some(WorktreeInfo {
                 branch: "feature/test".to_string(),
@@ -171,28 +216,56 @@ mod tests {
             id: "workspace-id".to_string(),
             name: "workspace".to_string(),
             path: path.to_string(),
+            codex_bin: None,
             kind,
             parent_id: None,
             worktree,
-            settings: WorkspaceSettings::default(),
+            settings: WorkspaceSettings {
+                codex_home: codex_home.map(|value| value.to_string()),
+                ..WorkspaceSettings::default()
+            },
         }
     }
 
+    fn settings_with_profile(id: &str, codex_home: &str) -> AppSettings {
+        let mut settings = AppSettings::default();
+        settings.active_codex_profile_id = Some(id.to_string());
+        settings.codex_profiles = vec![CodexProfile {
+            id: id.to_string(),
+            label: "Profile".to_string(),
+            codex_home: codex_home.to_string(),
+            ..CodexProfile::default()
+        }];
+        settings
+    }
+
     #[test]
-    fn workspace_codex_home_uses_default_resolution() {
-        let entry = workspace_entry(WorkspaceKind::Main, "/repo");
-        let _guard = ENV_LOCK.lock().expect("lock env");
+    fn worktree_inherits_parent_codex_home_override() {
+        let parent = workspace_entry(WorkspaceKind::Main, "/repo", Some("/tmp/codex-parent"));
+        let child = workspace_entry(WorkspaceKind::Worktree, "/repo/worktree", None);
 
-        let prev_codex_home = std::env::var("CODEX_HOME").ok();
-        std::env::set_var("CODEX_HOME", "/tmp/codex-global");
+        let resolved = resolve_workspace_codex_home_with_settings(&child, Some(&parent), None);
 
-        let resolved = resolve_workspace_codex_home(&entry, None);
-        assert_eq!(resolved, Some(PathBuf::from("/tmp/codex-global")));
+        assert_eq!(resolved, Some(PathBuf::from("/tmp/codex-parent")));
+    }
 
-        match prev_codex_home {
-            Some(value) => std::env::set_var("CODEX_HOME", value),
-            None => std::env::remove_var("CODEX_HOME"),
-        }
+    #[test]
+    fn workspace_codex_home_relative_resolves_against_workspace_path() {
+        let entry = workspace_entry(WorkspaceKind::Main, "/repo", Some(".codex"));
+
+        let resolved = resolve_workspace_codex_home_with_settings(&entry, None, None);
+
+        assert_eq!(resolved, Some(PathBuf::from("/repo/.codex")));
+    }
+
+    #[test]
+    fn worktree_relative_override_uses_parent_path() {
+        let parent = workspace_entry(WorkspaceKind::Main, "/repo", Some(".codex"));
+        let child = workspace_entry(WorkspaceKind::Worktree, "/repo/worktree", None);
+
+        let resolved = resolve_workspace_codex_home_with_settings(&child, Some(&parent), None);
+
+        assert_eq!(resolved, Some(PathBuf::from("/repo/.codex")));
     }
 
     #[test]
@@ -220,10 +293,7 @@ mod tests {
         assert_eq!(appdata, Some(PathBuf::from("/tmp/appdata-root/Codex")));
 
         let appdata_lower = normalize_codex_home("$appdata/Codex");
-        assert_eq!(
-            appdata_lower,
-            Some(PathBuf::from("/tmp/appdata-root/Codex"))
-        );
+        assert_eq!(appdata_lower, Some(PathBuf::from("/tmp/appdata-root/Codex")));
 
         match prev_home {
             Some(value) => std::env::set_var("HOME", value),
@@ -233,6 +303,52 @@ mod tests {
         match prev_appdata {
             Some(value) => std::env::set_var("APPDATA", value),
             None => std::env::remove_var("APPDATA"),
+        }
+    }
+
+    #[test]
+    fn default_codex_home_ignores_active_profile() {
+        let _guard = ENV_LOCK.lock().expect("lock env");
+        let prev = std::env::var("CODEX_HOME").ok();
+        std::env::set_var("CODEX_HOME", "/tmp/codex-default");
+        let settings = settings_with_profile("work", "/tmp/codex-work");
+        let resolved = resolve_default_codex_home_with_settings(Some(&settings));
+        assert_eq!(resolved, Some(PathBuf::from("/tmp/codex-default")));
+        match prev {
+            Some(value) => std::env::set_var("CODEX_HOME", value),
+            None => std::env::remove_var("CODEX_HOME"),
+        }
+    }
+
+    #[test]
+    fn workspace_uses_default_codex_home_when_no_override() {
+        let _guard = ENV_LOCK.lock().expect("lock env");
+        let prev = std::env::var("CODEX_HOME").ok();
+        std::env::set_var("CODEX_HOME", "/tmp/codex-default");
+        let settings = settings_with_profile("work", "/tmp/codex-work");
+        let entry = workspace_entry(WorkspaceKind::Main, "/repo", None);
+        let resolved =
+            resolve_workspace_codex_home_with_settings(&entry, None, Some(&settings));
+        assert_eq!(resolved, Some(PathBuf::from("/tmp/codex-default")));
+        match prev {
+            Some(value) => std::env::set_var("CODEX_HOME", value),
+            None => std::env::remove_var("CODEX_HOME"),
+        }
+    }
+
+    #[test]
+    fn workspace_override_beats_default() {
+        let _guard = ENV_LOCK.lock().expect("lock env");
+        let prev = std::env::var("CODEX_HOME").ok();
+        std::env::set_var("CODEX_HOME", "/tmp/codex-default");
+        let settings = settings_with_profile("work", "/tmp/codex-work");
+        let entry = workspace_entry(WorkspaceKind::Main, "/repo", Some("/tmp/codex-override"));
+        let resolved =
+            resolve_workspace_codex_home_with_settings(&entry, None, Some(&settings));
+        assert_eq!(resolved, Some(PathBuf::from("/tmp/codex-override")));
+        match prev {
+            Some(value) => std::env::set_var("CODEX_HOME", value),
+            None => std::env::remove_var("CODEX_HOME"),
         }
     }
 }

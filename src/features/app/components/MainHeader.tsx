@@ -5,19 +5,13 @@ import Terminal from "lucide-react/dist/esm/icons/terminal";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import type { BranchInfo, OpenAppTarget, WorkspaceInfo } from "../../../types";
 import type { ReactNode } from "react";
-import { revealInFileManagerLabel } from "../../../utils/platformPaths";
 import { BranchList } from "../../git/components/BranchList";
 import { filterBranches, findExactBranch } from "../../git/utils/branchSearch";
 import { validateBranchName } from "../../git/utils/branchValidation";
-import {
-  MenuTrigger,
-  PopoverSurface,
-} from "../../design-system/components/popover/PopoverPrimitives";
 import { OpenAppMenu } from "./OpenAppMenu";
 import { LaunchScriptButton } from "./LaunchScriptButton";
 import { LaunchScriptEntryButton } from "./LaunchScriptEntryButton";
 import type { WorkspaceLaunchScriptsState } from "../hooks/useWorkspaceLaunchScripts";
-import { useMenuController } from "../hooks/useMenuController";
 
 type MainHeaderProps = {
   workspace: WorkspaceInfo;
@@ -39,7 +33,6 @@ type MainHeaderProps = {
   onToggleTerminal: () => void;
   isTerminalOpen: boolean;
   showTerminalButton?: boolean;
-  showWorkspaceTools?: boolean;
   extraActionsNode?: ReactNode;
   launchScript?: string | null;
   launchScriptEditorOpen?: boolean;
@@ -92,7 +85,6 @@ export function MainHeader({
   onToggleTerminal,
   isTerminalOpen,
   showTerminalButton = true,
-  showWorkspaceTools = true,
   extraActionsNode,
   launchScript = null,
   launchScriptEditorOpen = false,
@@ -107,22 +99,17 @@ export function MainHeader({
   launchScriptsState,
   worktreeRename,
 }: MainHeaderProps) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [infoOpen, setInfoOpen] = useState(false);
   const [branchQuery, setBranchQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [copyFeedback, setCopyFeedback] = useState(false);
   const copyTimeoutRef = useRef<number | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const infoRef = useRef<HTMLDivElement | null>(null);
   const renameInputRef = useRef<HTMLInputElement | null>(null);
   const renameConfirmRef = useRef<HTMLButtonElement | null>(null);
   const renameOnCancel = worktreeRename?.onCancel;
-  const branchMenu = useMenuController({
-    onDismiss: () => {
-      setBranchQuery("");
-      setError(null);
-    },
-  });
-  const infoMenu = useMenuController();
-  const { isOpen: menuOpen, setOpen: setMenuOpen, containerRef: menuRef } = branchMenu;
-  const { isOpen: infoOpen, containerRef: infoRef } = infoMenu;
 
   const trimmedQuery = branchQuery.trim();
   const filteredBranches = useMemo(
@@ -151,6 +138,27 @@ export function MainHeader({
     () => `cd "${relativeWorktreePath}"`,
     [relativeWorktreePath],
   );
+
+  useEffect(() => {
+    if (!menuOpen && !infoOpen) {
+      return;
+    }
+    const handleClick = (event: MouseEvent) => {
+      const target = event.target as Node;
+      const menuContains = menuRef.current?.contains(target) ?? false;
+      const infoContains = infoRef.current?.contains(target) ?? false;
+      if (!menuContains && !infoContains) {
+        setMenuOpen(false);
+        setInfoOpen(false);
+        setBranchQuery("");
+        setError(null);
+      }
+    };
+    window.addEventListener("mousedown", handleClick);
+    return () => {
+      window.removeEventListener("mousedown", handleClick);
+    };
+  }, [infoOpen, menuOpen]);
 
   useEffect(() => {
     if (!infoOpen && renameOnCancel) {
@@ -196,18 +204,19 @@ export function MainHeader({
           </span>
           {disableBranchMenu ? (
             <div className="workspace-branch-static-row" ref={infoRef}>
-              <MenuTrigger
-                isOpen={infoOpen}
-                popupRole="dialog"
+              <button
+                type="button"
                 className="workspace-branch-static-button"
-                onClick={infoMenu.toggle}
+                onClick={() => setInfoOpen((prev) => !prev)}
+                aria-haspopup="dialog"
+                aria-expanded={infoOpen}
                 data-tauri-drag-region="false"
                 title="Worktree info"
               >
                 {worktreeLabel || branchName}
-              </MenuTrigger>
+              </button>
               {infoOpen && (
-                <PopoverSurface className="worktree-info-popover" role="dialog">
+                <div className="worktree-info-popover popover-surface" role="dialog">
                   {worktreeRename && (
                     <div className="worktree-info-rename">
                       <span className="worktree-info-label">Name</span>
@@ -330,28 +339,30 @@ export function MainHeader({
                       }}
                       data-tauri-drag-region="false"
                     >
-                      {revealInFileManagerLabel()}
+                      Reveal in Finder
                     </button>
                   </div>
-                </PopoverSurface>
+                </div>
               )}
             </div>
           ) : (
             <div className="workspace-branch-menu" ref={menuRef}>
-              <MenuTrigger
-                isOpen={menuOpen}
+              <button
+                type="button"
                 className="workspace-branch-button"
-                onClick={branchMenu.toggle}
+                onClick={() => setMenuOpen((prev) => !prev)}
+                aria-haspopup="menu"
+                aria-expanded={menuOpen}
                 data-tauri-drag-region="false"
               >
                 <span className="workspace-branch">{branchName}</span>
                 <span className="workspace-branch-caret" aria-hidden>
                   ›
                 </span>
-              </MenuTrigger>
+              </button>
               {menuOpen && (
-                <PopoverSurface
-                  className="workspace-branch-dropdown"
+                <div
+                  className="workspace-branch-dropdown popover-surface"
                   role="menu"
                   data-tauri-drag-region="false"
                 >
@@ -400,9 +411,6 @@ export function MainHeader({
                         }}
                         placeholder="Search or create branch"
                         className="branch-input"
-                        autoCorrect="off"
-                        autoCapitalize="none"
-                        spellCheck={false}
                         autoFocus
                         data-tauri-drag-region="false"
                         aria-label="Search branches"
@@ -470,15 +478,14 @@ export function MainHeader({
                     }}
                   />
                   {error && <div className="branch-error">{error}</div>}
-                </PopoverSurface>
+                </div>
               )}
             </div>
           )}
         </div>
       </div>
       <div className="main-header-actions">
-        {showWorkspaceTools &&
-          onRunLaunchScript &&
+        {onRunLaunchScript &&
           onOpenLaunchScriptEditor &&
           onCloseLaunchScriptEditor &&
           onLaunchScriptDraftChange &&
@@ -530,15 +537,13 @@ export function MainHeader({
               ))}
             </div>
           )}
-        {showWorkspaceTools ? (
-          <OpenAppMenu
-            path={resolvedWorktreePath}
-            openTargets={openTargets}
-            selectedOpenAppId={selectedOpenAppId}
-            onSelectOpenAppId={onSelectOpenAppId}
-            iconById={openAppIconById}
-          />
-        ) : null}
+        <OpenAppMenu
+          path={resolvedWorktreePath}
+          openTargets={openTargets}
+          selectedOpenAppId={selectedOpenAppId}
+          onSelectOpenAppId={onSelectOpenAppId}
+          iconById={openAppIconById}
+        />
         {showTerminalButton && (
           <button
             type="button"
