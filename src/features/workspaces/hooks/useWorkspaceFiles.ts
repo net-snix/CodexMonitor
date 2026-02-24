@@ -32,14 +32,11 @@ export function useWorkspaceFiles({
 }: UseWorkspaceFilesOptions) {
   const [files, setFiles] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [isDocumentVisible, setIsDocumentVisible] = useState(
-    () => document.visibilityState !== "hidden",
-  );
   const lastFetchedWorkspaceId = useRef<string | null>(null);
   const inFlight = useRef<string | null>(null);
 
-  const REFRESH_INTERVAL_MS = 30000;
-  const LARGE_REFRESH_INTERVAL_MS = 60000;
+  const REFRESH_INTERVAL_MS = 5000;
+  const LARGE_REFRESH_INTERVAL_MS = 20000;
   const LARGE_FILE_COUNT = 20000;
   const workspaceId = activeWorkspace?.id ?? null;
   const isConnected = Boolean(activeWorkspace?.connected);
@@ -104,16 +101,6 @@ export function useWorkspaceFiles({
   }, [isConnected, isEnabled, workspaceId]);
 
   useEffect(() => {
-    const handleVisibilityChange = () => {
-      setIsDocumentVisible(document.visibilityState !== "hidden");
-    };
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () => {
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
-  }, []);
-
-  useEffect(() => {
     if (!workspaceId || !isConnected || !isEnabled) {
       return;
     }
@@ -124,24 +111,20 @@ export function useWorkspaceFiles({
   }, [files.length, isConnected, isEnabled, refreshFiles, workspaceId]);
 
   useEffect(() => {
-    if (!workspaceId || !isConnected || !isPollingEnabled || !isDocumentVisible) {
+    if (!workspaceId || !isConnected || !isPollingEnabled) {
       return;
     }
     const refreshInterval =
       files.length > LARGE_FILE_COUNT ? LARGE_REFRESH_INTERVAL_MS : REFRESH_INTERVAL_MS;
 
     const interval = window.setInterval(() => {
-      // Skip if tab is hidden
-      if (document.visibilityState === "hidden") {
-        return;
-      }
       refreshFiles().catch(() => {});
     }, refreshInterval);
 
     return () => {
       window.clearInterval(interval);
     };
-  }, [files.length, isConnected, isDocumentVisible, isPollingEnabled, refreshFiles, workspaceId]);
+  }, [files.length, isConnected, isPollingEnabled, refreshFiles, workspaceId]);
 
   const fileOptions = useMemo(() => files.filter(Boolean), [files]);
 

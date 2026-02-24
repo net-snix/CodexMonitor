@@ -1,25 +1,15 @@
 import { useCallback, useMemo, useState } from "react";
-import type {
-  AppMention,
-  ComposerSendIntent,
-  FollowUpMessageBehavior,
-  QueuedMessage,
-  SendMessageResult,
-  WorkspaceInfo,
-} from "../../../types";
+import type { QueuedMessage, WorkspaceInfo } from "../../../types";
 import { useComposerImages } from "../../composer/hooks/useComposerImages";
 import { useQueuedSend } from "../../threads/hooks/useQueuedSend";
 
 export function useComposerController({
   activeThreadId,
-  activeTurnId,
   activeWorkspaceId,
   activeWorkspace,
   isProcessing,
   isReviewing,
-  queueFlushPaused = false,
   steerEnabled,
-  followUpMessageBehavior,
   appsEnabled,
   connectWorkspace,
   startThreadForWorkspace,
@@ -34,32 +24,24 @@ export function useComposerController({
   startStatus,
 }: {
   activeThreadId: string | null;
-  activeTurnId: string | null;
   activeWorkspaceId: string | null;
   activeWorkspace: WorkspaceInfo | null;
   isProcessing: boolean;
   isReviewing: boolean;
-  queueFlushPaused?: boolean;
   steerEnabled: boolean;
-  followUpMessageBehavior: FollowUpMessageBehavior;
   appsEnabled: boolean;
   connectWorkspace: (workspace: WorkspaceInfo) => Promise<void>;
   startThreadForWorkspace: (
     workspaceId: string,
     options?: { activate?: boolean },
   ) => Promise<string | null>;
-  sendUserMessage: (
-    text: string,
-    images?: string[],
-    appMentions?: AppMention[],
-    options?: { sendIntent?: ComposerSendIntent },
-  ) => Promise<{ status: "sent" | "blocked" | "steer_failed" }>;
+  sendUserMessage: (text: string, images?: string[]) => Promise<void>;
   sendUserMessageToThread: (
     workspace: WorkspaceInfo,
     threadId: string,
     text: string,
     images?: string[],
-  ) => Promise<void | SendMessageResult>;
+  ) => Promise<void>;
   startFork: (text: string) => Promise<void>;
   startReview: (text: string) => Promise<void>;
   startResume: (text: string) => Promise<void>;
@@ -93,12 +75,9 @@ export function useComposerController({
     removeQueuedMessage,
   } = useQueuedSend({
     activeThreadId,
-    activeTurnId,
     isProcessing,
     isReviewing,
-    queueFlushPaused,
     steerEnabled,
-    followUpMessageBehavior,
     appsEnabled,
     activeWorkspace,
     connectWorkspace,
@@ -135,11 +114,11 @@ export function useComposerController({
   );
 
   const handleSendPrompt = useCallback(
-    (text: string, appMentions?: AppMention[]) => {
+    (text: string) => {
       if (!text.trim()) {
         return;
       }
-      void handleSend(text, [], appMentions);
+      void handleSend(text, []);
     },
     [handleSend],
   );

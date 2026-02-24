@@ -13,7 +13,6 @@ type TabletLayoutProps = {
   tabletTab: "projects" | "codex" | "git" | "log";
   onSidebarResizeStart: (event: MouseEvent<HTMLDivElement>) => void;
   topbarLeftNode: ReactNode;
-  codexTopbarActionsNode?: ReactNode;
   messagesNode: ReactNode;
   composerNode: ReactNode;
   gitDiffPanelNode: ReactNode;
@@ -33,7 +32,6 @@ export function TabletLayout({
   tabletTab,
   onSidebarResizeStart,
   topbarLeftNode,
-  codexTopbarActionsNode,
   messagesNode,
   composerNode,
   gitDiffPanelNode,
@@ -58,11 +56,7 @@ export function TabletLayout({
         {showHome && homeNode}
         {showWorkspace && (
           <>
-            <MainTopbar
-              leftNode={topbarLeftNode}
-              actionsNode={tabletTab === "codex" ? codexTopbarActionsNode : undefined}
-              className="tablet-topbar"
-            />
+            <MainTopbar leftNode={topbarLeftNode} className="tablet-topbar" />
             {tabletTab === "codex" && (
               <>
                 <div className="content tablet-content">{messagesNode}</div>

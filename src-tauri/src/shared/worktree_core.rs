@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use std::path::PathBuf;
 
 fn sanitize_name(value: &str, fallback: &str) -> String {
@@ -40,12 +42,7 @@ pub(crate) fn unique_worktree_path_best_effort(base_dir: &PathBuf, name: &str) -
     candidate
 }
 
-// Used by daemon-only worktree creation paths.
-#[allow(dead_code)]
-pub(crate) fn unique_worktree_path_strict(
-    base_dir: &PathBuf,
-    name: &str,
-) -> Result<PathBuf, String> {
+pub(crate) fn unique_worktree_path_strict(base_dir: &PathBuf, name: &str) -> Result<PathBuf, String> {
     let candidate = base_dir.join(name);
     if !candidate.exists() {
         return Ok(candidate);

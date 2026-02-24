@@ -23,7 +23,6 @@ type UseTerminalSessionOptions = {
   activeWorkspace: WorkspaceInfo | null;
   activeTerminalId: string | null;
   isVisible: boolean;
-  focusRequestVersion: number;
   onDebug?: (entry: DebugEntry) => void;
   onSessionExit?: (workspaceId: string, terminalId: string) => void;
 };
@@ -115,7 +114,6 @@ export function useTerminalSession({
   activeWorkspace,
   activeTerminalId,
   isVisible,
-  focusRequestVersion,
   onDebug,
   onSessionExit,
 }: UseTerminalSessionOptions): TerminalSessionState {
@@ -129,7 +127,6 @@ export function useTerminalSession({
   const renderedKeyRef = useRef<string | null>(null);
   const activeWorkspaceRef = useRef<WorkspaceInfo | null>(null);
   const activeTerminalIdRef = useRef<string | null>(null);
-  const pendingFocusRef = useRef(false);
   const [status, setStatus] = useState<TerminalStatus>("idle");
   const [message, setMessage] = useState("Open a terminal to start a session.");
   const [hasSession, setHasSession] = useState(false);
@@ -168,14 +165,6 @@ export function useTerminalSession({
     terminalRef.current?.write(data);
   }, []);
 
-  const focusTerminalIfRequested = useCallback(() => {
-    if (!pendingFocusRef.current) {
-      return;
-    }
-    pendingFocusRef.current = false;
-    terminalRef.current?.focus();
-  }, []);
-
   const refreshTerminal = useCallback(() => {
     const terminal = terminalRef.current;
     if (!terminal) {
@@ -183,8 +172,8 @@ export function useTerminalSession({
     }
     const lastRow = Math.max(0, terminal.rows - 1);
     terminal.refresh(0, lastRow);
-    focusTerminalIfRequested();
-  }, [focusTerminalIfRequested]);
+    terminal.focus();
+  }, []);
 
   const syncActiveBuffer = useCallback(
     (key: string) => {
@@ -363,14 +352,6 @@ export function useTerminalSession({
     syncActiveBuffer,
     sessionResetCounter,
   ]);
-
-  useEffect(() => {
-    if (!isVisible || focusRequestVersion === 0) {
-      return;
-    }
-    pendingFocusRef.current = true;
-    focusTerminalIfRequested();
-  }, [focusRequestVersion, focusTerminalIfRequested, isVisible]);
 
   useEffect(() => {
     if (!isVisible || !activeKey || !terminalRef.current || !fitAddonRef.current) {

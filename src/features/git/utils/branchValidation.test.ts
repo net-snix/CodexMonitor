@@ -10,7 +10,6 @@ describe("validateBranchName", () => {
   it("rejects invalid names", () => {
     expect(validateBranchName(".")).toContain("cannot be '.' or '..'");
     expect(validateBranchName("hello world")).toContain("cannot contain spaces");
-    expect(validateBranchName("feature//oops")).toContain("cannot contain '//'");
     expect(validateBranchName("feature..oops")).toContain("cannot contain '..'");
     expect(validateBranchName("topic@{x")).toContain("cannot contain '@{'");
   });

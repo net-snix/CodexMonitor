@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import type { DebugEntry, WorkspaceInfo } from "../../../types";
 import { closeTerminalSession } from "../../../services/tauri";
 import { buildErrorDebugEntry } from "../../../utils/debugEntries";
@@ -23,10 +23,6 @@ export function useTerminalController({
   const cleanupTerminalRef = useRef<((workspaceId: string, terminalId: string) => void) | null>(
     null,
   );
-  const [focusRequestVersion, setFocusRequestVersion] = useState(0);
-  const requestTerminalFocus = useCallback(() => {
-    setFocusRequestVersion((prev) => prev + 1);
-  }, []);
   const shouldIgnoreTerminalCloseError = useCallback((error: unknown) => {
     const message = error instanceof Error ? error.message : String(error);
     return message.includes("Terminal session not found");
@@ -70,7 +66,6 @@ export function useTerminalController({
     activeWorkspace,
     activeTerminalId,
     isVisible: terminalOpen,
-    focusRequestVersion,
     onDebug,
     onSessionExit: (workspaceId, terminalId) => {
       const shouldClosePanel =
@@ -93,19 +88,17 @@ export function useTerminalController({
       if (!activeWorkspaceId) {
         return;
       }
-      requestTerminalFocus();
       setActiveTerminal(activeWorkspaceId, terminalId);
     },
-    [activeWorkspaceId, requestTerminalFocus, setActiveTerminal],
+    [activeWorkspaceId, setActiveTerminal],
   );
 
   const onNewTerminal = useCallback(() => {
     if (!activeWorkspaceId) {
       return;
     }
-    requestTerminalFocus();
     createTerminal(activeWorkspaceId);
-  }, [activeWorkspaceId, createTerminal, requestTerminalFocus]);
+  }, [activeWorkspaceId, createTerminal]);
 
   const onCloseTerminal = useCallback(
     (terminalId: string) => {
@@ -146,6 +139,5 @@ export function useTerminalController({
     terminalState,
     ensureTerminalWithTitle,
     restartTerminalSession,
-    requestTerminalFocus,
   };
 }

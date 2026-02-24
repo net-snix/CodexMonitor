@@ -5,10 +5,6 @@ export type TerminalTab = {
   title: string;
 };
 
-type TerminalTabRecord = TerminalTab & {
-  autoNamed: boolean;
-};
-
 type UseTerminalTabsOptions = {
   activeWorkspaceId: string | null;
   onCloseTerminal?: (workspaceId: string, terminalId: string) => void;
@@ -21,33 +17,12 @@ function createTerminalId() {
   return `terminal-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-function renumberAutoNamedTabs(tabs: TerminalTabRecord[]): TerminalTabRecord[] {
-  let autoNamedIndex = 1;
-  let changed = false;
-  const nextTabs = tabs.map((tab) => {
-    if (!tab.autoNamed) {
-      return tab;
-    }
-    const nextTitle = `Terminal ${autoNamedIndex}`;
-    autoNamedIndex += 1;
-    if (tab.title === nextTitle) {
-      return tab;
-    }
-    changed = true;
-    return {
-      ...tab,
-      title: nextTitle,
-    };
-  });
-  return changed ? nextTabs : tabs;
-}
-
 export function useTerminalTabs({
   activeWorkspaceId,
   onCloseTerminal,
 }: UseTerminalTabsOptions) {
   const [tabsByWorkspace, setTabsByWorkspace] = useState<
-    Record<string, TerminalTabRecord[]>
+    Record<string, TerminalTab[]>
   >({});
   const [activeTerminalIdByWorkspace, setActiveTerminalIdByWorkspace] = useState<
     Record<string, string | null>
@@ -57,13 +32,10 @@ export function useTerminalTabs({
     const id = createTerminalId();
     setTabsByWorkspace((prev) => {
       const existing = prev[workspaceId] ?? [];
-      const nextTabs = renumberAutoNamedTabs([
-        ...existing,
-        { id, title: "", autoNamed: true },
-      ]);
+      const title = `Terminal ${existing.length + 1}`;
       return {
         ...prev,
-        [workspaceId]: nextTabs,
+        [workspaceId]: [...existing, { id, title }],
       };
     });
     setActiveTerminalIdByWorkspace((prev) => ({ ...prev, [workspaceId]: id }));
@@ -76,28 +48,17 @@ export function useTerminalTabs({
         const existing = prev[workspaceId] ?? [];
         const index = existing.findIndex((tab) => tab.id === terminalId);
         if (index === -1) {
-          const nextTabs = renumberAutoNamedTabs([
-            ...existing,
-            { id: terminalId, title, autoNamed: false },
-          ]);
           return {
             ...prev,
-            [workspaceId]: nextTabs,
+            [workspaceId]: [...existing, { id: terminalId, title }],
           };
         }
-        if (!existing[index].autoNamed && existing[index].title === title) {
+        if (existing[index].title === title) {
           return prev;
         }
         const nextTabs = existing.slice();
-        nextTabs[index] = {
-          ...existing[index],
-          title,
-          autoNamed: false,
-        };
-        return {
-          ...prev,
-          [workspaceId]: renumberAutoNamedTabs(nextTabs),
-        };
+        nextTabs[index] = { ...existing[index], title };
+        return { ...prev, [workspaceId]: nextTabs };
       });
       setActiveTerminalIdByWorkspace((prev) => ({ ...prev, [workspaceId]: terminalId }));
       return terminalId;
@@ -109,9 +70,7 @@ export function useTerminalTabs({
     (workspaceId: string, terminalId: string) => {
       setTabsByWorkspace((prev) => {
         const existing = prev[workspaceId] ?? [];
-        const nextTabs = renumberAutoNamedTabs(
-          existing.filter((tab) => tab.id !== terminalId),
-        );
+        const nextTabs = existing.filter((tab) => tab.id !== terminalId);
         setActiveTerminalIdByWorkspace((prevActive) => {
           const active = prevActive[workspaceId];
           if (active !== terminalId) {
@@ -154,10 +113,7 @@ export function useTerminalTabs({
     if (!activeWorkspaceId) {
       return [];
     }
-    return (tabsByWorkspace[activeWorkspaceId] ?? []).map(({ id, title }) => ({
-      id,
-      title,
-    }));
+    return tabsByWorkspace[activeWorkspaceId] ?? [];
   }, [activeWorkspaceId, tabsByWorkspace]);
 
   const activeTerminalId = useMemo(() => {

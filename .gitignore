@@ -11,8 +11,6 @@ node_modules
 dist
 dist-ssr
 *.local
-src-tauri/tauri.ios.local.conf.json
-.testflight.local.env
 
 # Editor directories and files
 .vscode/*
@@ -28,11 +26,4 @@ src-tauri/tauri.ios.local.conf.json
 CodexMonitor.zip
 .codex-worktrees/
 .codexmonitor/
-.agent/
-.agents/
-.claude/
-.cursor/
 public/assets/material-icons/
-
-# Nix
-result

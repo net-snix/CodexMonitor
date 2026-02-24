@@ -1,69 +1,11 @@
-import type { AccessMode } from "@/types";
-
-const STORAGE_KEY_THREAD_ACTIVITY = "codexmonitor.threadLastUserActivity";
+export const STORAGE_KEY_THREAD_ACTIVITY = "codexmonitor.threadLastUserActivity";
 export const STORAGE_KEY_PINNED_THREADS = "codexmonitor.pinnedThreads";
 export const STORAGE_KEY_CUSTOM_NAMES = "codexmonitor.threadCustomNames";
-export const STORAGE_KEY_THREAD_CODEX_PARAMS = "codexmonitor.threadCodexParams";
-export const STORAGE_KEY_DETACHED_REVIEW_LINKS = "codexmonitor.detachedReviewLinks";
 export const MAX_PINS_SOFT_LIMIT = 5;
 
 export type ThreadActivityMap = Record<string, Record<string, number>>;
 export type PinnedThreadsMap = Record<string, number>;
 export type CustomNamesMap = Record<string, string>;
-type DetachedReviewLinksMap = Record<string, Record<string, string>>;
-
-// Per-thread Codex parameter overrides. Keyed by `${workspaceId}:${threadId}`.
-// These are UI-level preferences (not server state) and are best-effort persisted.
-export type ThreadCodexParams = {
-  modelId: string | null;
-  effort: string | null;
-  accessMode: AccessMode | null;
-  collaborationModeId: string | null;
-  // string => explicit per-thread override
-  // null => explicit "Default" (no override)
-  // undefined => legacy/unset thread value that should inherit no-thread scope
-  codexArgsOverride: string | null | undefined;
-  updatedAt: number;
-};
-
-export type ThreadCodexParamsMap = Record<string, ThreadCodexParams>;
-
-export function makeThreadCodexParamsKey(workspaceId: string, threadId: string): string {
-  return `${workspaceId}:${threadId}`;
-}
-
-export function loadThreadCodexParams(): ThreadCodexParamsMap {
-  if (typeof window === "undefined") {
-    return {};
-  }
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY_THREAD_CODEX_PARAMS);
-    if (!raw) {
-      return {};
-    }
-    const parsed = JSON.parse(raw) as ThreadCodexParamsMap;
-    if (!parsed || typeof parsed !== "object") {
-      return {};
-    }
-    return parsed;
-  } catch {
-    return {};
-  }
-}
-
-export function saveThreadCodexParams(next: ThreadCodexParamsMap): void {
-  if (typeof window === "undefined") {
-    return;
-  }
-  try {
-    window.localStorage.setItem(
-      STORAGE_KEY_THREAD_CODEX_PARAMS,
-      JSON.stringify(next),
-    );
-  } catch {
-    // Best-effort persistence.
-  }
-}
 
 export function loadThreadActivity(): ThreadActivityMap {
   if (typeof window === "undefined") {
@@ -169,39 +111,6 @@ export function savePinnedThreads(pinned: PinnedThreadsMap) {
     window.localStorage.setItem(
       STORAGE_KEY_PINNED_THREADS,
       JSON.stringify(pinned),
-    );
-  } catch {
-    // Best-effort persistence; ignore write failures.
-  }
-}
-
-export function loadDetachedReviewLinks(): DetachedReviewLinksMap {
-  if (typeof window === "undefined") {
-    return {};
-  }
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY_DETACHED_REVIEW_LINKS);
-    if (!raw) {
-      return {};
-    }
-    const parsed = JSON.parse(raw) as DetachedReviewLinksMap;
-    if (!parsed || typeof parsed !== "object") {
-      return {};
-    }
-    return parsed;
-  } catch {
-    return {};
-  }
-}
-
-export function saveDetachedReviewLinks(links: DetachedReviewLinksMap) {
-  if (typeof window === "undefined") {
-    return;
-  }
-  try {
-    window.localStorage.setItem(
-      STORAGE_KEY_DETACHED_REVIEW_LINKS,
-      JSON.stringify(links),
     );
   } catch {
     // Best-effort persistence; ignore write failures.

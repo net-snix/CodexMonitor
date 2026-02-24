@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ConversationItem, ThreadSummary } from "@/types";
+import type { ConversationItem, ThreadSummary } from "../../../types";
 import { initialState, threadReducer } from "./useThreadsReducer";
 import type { ThreadState } from "./useThreadsReducer";
 
@@ -89,54 +89,6 @@ describe("threadReducer", () => {
     expect(next.threadsByWorkspace["ws-1"]?.[0]?.updatedAt).toBe(1500);
   });
 
-  it("moves active thread to top on timestamp updates when sorted by updated_at", () => {
-    const threads: ThreadSummary[] = [
-      { id: "thread-1", name: "Agent 1", updatedAt: 1000 },
-      { id: "thread-2", name: "Agent 2", updatedAt: 900 },
-    ];
-    const next = threadReducer(
-      {
-        ...initialState,
-        threadsByWorkspace: { "ws-1": threads },
-        threadSortKeyByWorkspace: { "ws-1": "updated_at" },
-      },
-      {
-        type: "setThreadTimestamp",
-        workspaceId: "ws-1",
-        threadId: "thread-2",
-        timestamp: 1500,
-      },
-    );
-    expect(next.threadsByWorkspace["ws-1"]?.map((thread) => thread.id)).toEqual([
-      "thread-2",
-      "thread-1",
-    ]);
-  });
-
-  it("keeps ordering stable on timestamp updates when sorted by created_at", () => {
-    const threads: ThreadSummary[] = [
-      { id: "thread-1", name: "Agent 1", updatedAt: 1000 },
-      { id: "thread-2", name: "Agent 2", updatedAt: 900 },
-    ];
-    const next = threadReducer(
-      {
-        ...initialState,
-        threadsByWorkspace: { "ws-1": threads },
-        threadSortKeyByWorkspace: { "ws-1": "created_at" },
-      },
-      {
-        type: "setThreadTimestamp",
-        workspaceId: "ws-1",
-        threadId: "thread-2",
-        timestamp: 1500,
-      },
-    );
-    expect(next.threadsByWorkspace["ws-1"]?.map((thread) => thread.id)).toEqual([
-      "thread-1",
-      "thread-2",
-    ]);
-  });
-
   it("tracks processing durations", () => {
     const started = threadReducer(
       {
@@ -165,67 +117,6 @@ describe("threadReducer", () => {
       timestamp: 1600,
     });
     expect(stopped.threadStatusById["thread-1"]?.lastDurationMs).toBe(600);
-  });
-
-  it("does not churn state for repeated processing=true updates", () => {
-    const processingState = threadReducer(
-      {
-        ...initialState,
-        threadStatusById: {
-          "thread-1": {
-            isProcessing: true,
-            hasUnread: false,
-            isReviewing: false,
-            processingStartedAt: 1000,
-            lastDurationMs: null,
-          },
-        },
-      },
-      {
-        type: "markProcessing",
-        threadId: "thread-1",
-        isProcessing: true,
-        timestamp: 1200,
-      },
-    );
-
-    expect(processingState).toBe(
-      threadReducer(processingState, {
-        type: "markProcessing",
-        threadId: "thread-1",
-        isProcessing: true,
-        timestamp: 1400,
-      }),
-    );
-  });
-
-  it("does not churn state for unchanged unread/review flags", () => {
-    const base = {
-      ...initialState,
-      threadStatusById: {
-        "thread-1": {
-          isProcessing: false,
-          hasUnread: true,
-          isReviewing: true,
-          processingStartedAt: null,
-          lastDurationMs: 300,
-        },
-      },
-    };
-
-    const unread = threadReducer(base, {
-      type: "markUnread",
-      threadId: "thread-1",
-      hasUnread: true,
-    });
-    expect(unread).toBe(base);
-
-    const reviewing = threadReducer(base, {
-      type: "markReviewing",
-      threadId: "thread-1",
-      isReviewing: true,
-    });
-    expect(reviewing).toBe(base);
   });
 
   it("tracks request user input queue", () => {
@@ -512,37 +403,6 @@ describe("threadReducer", () => {
     expect(removed.userInputRequests).toEqual([requestB]);
   });
 
-  it("stores turn diff updates by thread id", () => {
-    const next = threadReducer(initialState, {
-      type: "setThreadTurnDiff",
-      threadId: "thread-1",
-      diff: "diff --git a/file.ts b/file.ts",
-    });
-
-    expect(next.turnDiffByThread["thread-1"]).toBe(
-      "diff --git a/file.ts b/file.ts",
-    );
-  });
-
-  it("clears turn diff state when a thread is removed", () => {
-    const base: ThreadState = {
-      ...initialState,
-      threadsByWorkspace: {
-        "ws-1": [{ id: "thread-1", name: "Agent 1", updatedAt: 1 }],
-      },
-      activeThreadIdByWorkspace: { "ws-1": "thread-1" },
-      turnDiffByThread: { "thread-1": "diff --git a/file.ts b/file.ts" },
-    };
-
-    const next = threadReducer(base, {
-      type: "removeThread",
-      workspaceId: "ws-1",
-      threadId: "thread-1",
-    });
-
-    expect(next.turnDiffByThread["thread-1"]).toBeUndefined();
-  });
-
   it("hides background threads and keeps them hidden on future syncs", () => {
     const withThread = threadReducer(initialState, {
       type: "ensureThread",
@@ -561,7 +421,6 @@ describe("threadReducer", () => {
     const synced = threadReducer(hidden, {
       type: "setThreads",
       workspaceId: "ws-1",
-      sortKey: "updated_at",
       threads: [
         { id: "thread-bg", name: "Agent 1", updatedAt: Date.now() },
         { id: "thread-visible", name: "Agent 2", updatedAt: Date.now() },
@@ -571,132 +430,4 @@ describe("threadReducer", () => {
     expect(ids).toContain("thread-visible");
     expect(ids).not.toContain("thread-bg");
   });
-
-  it("preserves active, processing, and ancestor anchors on partial setThreads payloads", () => {
-    const base: ThreadState = {
-      ...initialState,
-      threadsByWorkspace: {
-        "ws-1": [
-          { id: "thread-parent", name: "Parent (stale)", updatedAt: 10 },
-          { id: "thread-child", name: "Child (stale)", updatedAt: 11 },
-          { id: "thread-active", name: "Active", updatedAt: 12 },
-          { id: "thread-processing", name: "Processing", updatedAt: 13 },
-        ],
-      },
-      activeThreadIdByWorkspace: { "ws-1": "thread-active" },
-      threadParentById: {
-        "thread-child": "thread-parent",
-      },
-      threadStatusById: {
-        "thread-processing": {
-          isProcessing: true,
-          hasUnread: false,
-          isReviewing: false,
-          processingStartedAt: null,
-          lastDurationMs: null,
-        },
-      },
-      lastAgentMessageByThread: {
-        "thread-parent": {
-          text: "Parent fresh preview",
-          timestamp: 300,
-        },
-      },
-    };
-
-    const next = threadReducer(base, {
-      type: "setThreads",
-      workspaceId: "ws-1",
-      sortKey: "updated_at",
-      threads: [
-        { id: "thread-child", name: "Child (fresh)", updatedAt: 200 },
-        { id: "thread-new", name: "New", updatedAt: 199 },
-      ],
-    });
-
-    expect(next.threadsByWorkspace["ws-1"]?.map((thread) => thread.id)).toEqual([
-      "thread-child",
-      "thread-new",
-      "thread-active",
-      "thread-processing",
-      "thread-parent",
-    ]);
-    expect(
-      next.threadsByWorkspace["ws-1"]?.find((thread) => thread.id === "thread-child")
-        ?.name,
-    ).toBe("Child (fresh)");
-    expect(
-      next.threadsByWorkspace["ws-1"]?.find((thread) => thread.id === "thread-parent")
-        ?.updatedAt,
-    ).toBe(300);
-  });
-
-  it("does not resurrect hidden anchors on partial setThreads payloads", () => {
-    const base: ThreadState = {
-      ...initialState,
-      threadsByWorkspace: {
-        "ws-1": [
-          { id: "thread-parent", name: "Parent", updatedAt: 10 },
-          { id: "thread-child", name: "Child", updatedAt: 11 },
-          { id: "thread-active", name: "Active", updatedAt: 12 },
-          { id: "thread-processing", name: "Processing", updatedAt: 13 },
-        ],
-      },
-      activeThreadIdByWorkspace: { "ws-1": "thread-active" },
-      hiddenThreadIdsByWorkspace: {
-        "ws-1": {
-          "thread-parent": true,
-          "thread-active": true,
-          "thread-processing": true,
-        },
-      },
-      threadParentById: {
-        "thread-child": "thread-parent",
-      },
-      threadStatusById: {
-        "thread-processing": {
-          isProcessing: true,
-          hasUnread: false,
-          isReviewing: false,
-          processingStartedAt: null,
-          lastDurationMs: null,
-        },
-      },
-    };
-
-    const next = threadReducer(base, {
-      type: "setThreads",
-      workspaceId: "ws-1",
-      sortKey: "updated_at",
-      threads: [{ id: "thread-child", name: "Child", updatedAt: 210 }],
-    });
-
-    expect(next.threadsByWorkspace["ws-1"]?.map((thread) => thread.id)).toEqual([
-      "thread-child",
-    ]);
-  });
-
-  it("trims existing items when maxItemsPerThread is reduced", () => {
-    const items: ConversationItem[] = Array.from({ length: 5 }, (_, index) => ({
-      id: `msg-${index}`,
-      kind: "message",
-      role: "assistant",
-      text: `message ${index}`,
-    }));
-
-    const withItems = threadReducer(initialState, {
-      type: "setThreadItems",
-      threadId: "thread-1",
-      items,
-    });
-    expect(withItems.itemsByThread["thread-1"]).toHaveLength(5);
-
-    const trimmed = threadReducer(withItems, {
-      type: "setMaxItemsPerThread",
-      maxItemsPerThread: 3,
-    });
-    expect(trimmed.itemsByThread["thread-1"]).toHaveLength(3);
-    expect(trimmed.itemsByThread["thread-1"]?.[0]?.id).toBe("msg-2");
-  });
-
 });

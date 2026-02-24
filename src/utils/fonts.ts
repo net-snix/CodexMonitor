@@ -1,8 +1,8 @@
 export const DEFAULT_UI_FONT_FAMILY =
-  'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
+  "\"SF Pro Text\", \"SF Pro Display\", -apple-system, \"Helvetica Neue\", sans-serif";
 
 export const DEFAULT_CODE_FONT_FAMILY =
-  'ui-monospace, "Cascadia Mono", "Segoe UI Mono", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace';
+  "\"SF Mono\", \"SFMono-Regular\", Menlo, Monaco, monospace";
 
 export const CODE_FONT_SIZE_DEFAULT = 11;
 export const CODE_FONT_SIZE_MIN = 9;

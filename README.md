@@ -2,23 +2,17 @@
 
 ![CodexMonitor](screenshot.png)
 
-CodexMonitor is a Tauri app for orchestrating multiple Codex agents across local workspaces. It provides a sidebar to manage projects, a home screen for quick actions, and a conversation view backed by the Codex app-server protocol.
+CodexMonitor is a macOS Tauri app for orchestrating multiple Codex agents across local workspaces. It provides a sidebar to manage projects, a home screen for quick actions, and a conversation view backed by the Codex app-server protocol.
 
 ## Fork differences (net-snix)
 
 Strikethrough means the item has landed in origin.
 
-- ~~Account switcher: log in and out of your ChatGPT account~~
-- Account saver: persist multiple Codex auth profiles.
-- Easy switching: one-click switch between saved accounts
-- Toggle: optional auto-switch between accounts when plan limits hit.
-- ~~Toggle: show whats left instead of used for plan limits~~
-- ~~Theme: Dim mode~~
-- Theme: Winodws XP styling option for the UI.
-
-
-<img width="2882" height="1732" alt="CleanShot 2026-02-07 at 22 25 04" src="https://github.com/user-attachments/assets/27121301-e246-496e-97bb-a6aa89ebc419" />
-
+- ~~Account switching: log in and out of your accounts manually.~~
+- Easy account switching: account saving + one-click switch between saved accounts.
+- Auto switch: toggle to switch to another saved account when Codex usage limits are reached.
+- ~~Dim mode.~~
+- ~~Usage limit toggle shows remaining instead of used.~~
 
 ## Features
 
@@ -29,12 +23,10 @@ Strikethrough means the item has landed in origin.
 - Worktree and clone agents for isolated work; worktrees live under the app data directory (legacy `.codex-worktrees` supported).
 - Thread management: pin/rename/archive/copy, per-thread drafts, and stop/interrupt in-flight turns.
 - Optional remote backend (daemon) mode for running Codex on another machine.
-- Remote setup helpers for self-hosted connectivity (Tailscale detection/host bootstrap for TCP mode).
 
 ### Composer & Agent Controls
 
-- Compose with image attachments (picker, drag/drop, paste) and configurable follow-up behavior (`Queue` vs `Steer` while a run is active).
-- Use `Shift+Cmd+Enter` (macOS) or `Shift+Ctrl+Enter` (Windows/Linux) to send the opposite follow-up action for a single message.
+- Compose with queueing plus image attachments (picker, drag/drop, paste).
 - Autocomplete for skills (`$`), prompts (`/prompts:`), reviews (`/review`), and file paths (`@`).
 - Model picker, collaboration modes (when enabled), reasoning effort, access mode, and context usage ring.
 - Dictation with hold-to-talk shortcuts and live waveform (Whisper).
@@ -49,7 +41,7 @@ Strikethrough means the item has landed in origin.
 
 ### Files & Prompts
 
-- File tree with search, file-type icons, and Reveal in Finder/Explorer.
+- File tree with search, file-type icons, and Reveal in Finder.
 - Prompt library for global/workspace prompts: create/edit/delete/move and run in current or new threads.
 
 ### UI & Experience
@@ -57,20 +49,19 @@ Strikethrough means the item has landed in origin.
 - Resizable sidebar/right/plan/terminal/debug panels with persisted sizes.
 - Responsive layouts (desktop/tablet/phone) with tabbed navigation.
 - Sidebar usage and credits meter for account rate limits plus a home usage snapshot.
-- Optional Windows XP (Luna) theme for classic desktop styling.
 - Terminal dock with multiple tabs for background commands (experimental).
-- In-app updates with toast-driven download/install, debug panel copy/clear, sound notifications, plus platform-specific window effects (macOS overlay title bar + vibrancy) and a reduced transparency toggle.
+- In-app updates with toast-driven download/install, debug panel copy/clear, sound notifications, and macOS overlay title bar with vibrancy + reduced transparency toggle.
 
 ## Requirements
 
 - Node.js + npm
 - Rust toolchain (stable)
-- CMake (required for native dependencies; dictation/Whisper uses it)
-- LLVM/Clang (required on Windows to build dictation dependencies via bindgen)
-- Codex CLI installed and available as `codex` in `PATH` (or configure a custom Codex binary in app/workspace settings)
+- CMake (required for native dependencies; Whisper/dictation uses it on non-Windows)
+- Codex installed on your system and available as `codex` in `PATH`
 - Git CLI (used for worktree operations)
-- GitHub CLI (`gh`) for GitHub Issues/PR integrations (optional)
+- GitHub CLI (`gh`) for the Issues panel (optional)
 
+If the `codex` binary is not in `PATH`, update the backend to pass a custom path per workspace.
 If you hit native build errors, run:
 
 ```bash
@@ -88,153 +79,18 @@ npm install
 Run in dev mode:
 
 ```bash
-npm run tauri:dev
+npm run tauri dev
 ```
-
-## iOS Support (WIP)
-
-iOS support is currently in progress.
-
-- Current status: mobile layout runs, remote backend flow is wired, and iOS defaults to remote backend mode.
-- Current limits: terminal and dictation remain unavailable on mobile builds.
-- Desktop behavior is unchanged: macOS/Linux/Windows remain local-first unless remote mode is explicitly selected.
-
-### iOS + Tailscale Setup (TCP)
-
-Use this when connecting the iOS app to a desktop-hosted daemon over your Tailscale tailnet.
-Canonical runbook: `docs/mobile-ios-tailscale-blueprint.md`.
-
-1. Install and sign in to Tailscale on both desktop and iPhone (same tailnet).
-2. On desktop CodexMonitor, open `Settings > Server`.
-3. Set a `Remote backend token`.
-4. Start the desktop daemon with `Start daemon` (in `Mobile access daemon`).
-5. In `Tailscale helper`, use `Detect Tailscale` and note the suggested host (for example `your-mac.your-tailnet.ts.net:4732`).
-6. On iOS CodexMonitor, open `Settings > Server`.
-7. Enter the desktop Tailscale host and the same token.
-8. Tap `Connect & test` and confirm it succeeds.
-
-Notes:
-
-- The desktop daemon must stay running while iOS is connected.
-- If the test fails, confirm both devices are online in Tailscale and that host/token match desktop settings.
-
-### Headless Daemon Management (No Desktop UI)
-
-Use the standalone daemon control CLI when you want iOS remote mode without keeping the desktop app open.
-
-Build binaries:
-
-```bash
-cd src-tauri
-cargo build --bin codex_monitor_daemon --bin codex_monitor_daemonctl
-```
-
-Examples:
-
-```bash
-# Show current daemon status
-./target/debug/codex_monitor_daemonctl status
-
-# Start daemon using host/token from settings.json
-./target/debug/codex_monitor_daemonctl start
-
-# Stop daemon
-./target/debug/codex_monitor_daemonctl stop
-
-# Print equivalent daemon start command
-./target/debug/codex_monitor_daemonctl command-preview
-```
-
-Useful overrides:
-
-- `--data-dir <path>`: app data dir containing `settings.json` / `workspaces.json`
-- `--listen <addr>`: bind address override
-- `--token <token>`: token override
-- `--daemon-path <path>`: explicit `codex-monitor-daemon` binary path
-- `--json`: machine-readable output
-
-### iOS Prerequisites
-
-- Xcode + Command Line Tools installed.
-- Rust iOS targets installed:
-
-```bash
-rustup target add aarch64-apple-ios aarch64-apple-ios-sim
-# Optional (Intel Mac simulator builds):
-rustup target add x86_64-apple-ios
-```
-
-- Apple signing configured (development team).
-  - Set `bundle.iOS.developmentTeam` and `identifier` in `src-tauri/tauri.ios.local.conf.json` (preferred for local machine setup), or
-  - set values in `src-tauri/tauri.ios.conf.json`, or
-  - pass `--team <TEAM_ID>` to the device script.
-  - `build_run_ios*.sh` and `release_testflight_ios.sh` automatically merge `src-tauri/tauri.ios.local.conf.json` when present.
-
-### Run on iOS Simulator
-
-```bash
-./scripts/build_run_ios.sh
-```
-
-Options:
-
-- `--simulator "<name>"` to target a specific simulator.
-- `--target aarch64-sim|x86_64-sim` to override architecture.
-- `--skip-build` to reuse the current app bundle.
-- `--no-clean` to preserve `src-tauri/gen/apple/build` between builds.
-
-### Run on USB Device
-
-List discoverable devices:
-
-```bash
-./scripts/build_run_ios_device.sh --list-devices
-```
-
-Build, install, and launch on a specific device:
-
-```bash
-./scripts/build_run_ios_device.sh --device "<device name or identifier>" --team <TEAM_ID>
-```
-
-Additional options:
-
-- `--target aarch64` to override architecture.
-- `--skip-build` to reuse the current app bundle.
-- `--bundle-id <id>` to launch a non-default bundle identifier.
-
-First-time device setup usually requires:
-
-1. iPhone unlocked and trusted with this Mac.
-2. Developer Mode enabled on iPhone.
-3. Pairing/signing approved in Xcode at least once.
-
-If signing is not ready yet, open Xcode from the script flow:
-
-```bash
-./scripts/build_run_ios_device.sh --open-xcode
-```
-
-### iOS TestFlight Release (Scripted)
-
-Use the end-to-end script to archive, upload, configure compliance, assign beta group, and submit for beta review.
-
-```bash
-./scripts/release_testflight_ios.sh
-```
-
-The script auto-loads release metadata from `.testflight.local.env` (gitignored).
-For new setups, copy `.testflight.local.env.example` to `.testflight.local.env` and fill values.
 
 ## Release Build
 
-Build the production Tauri bundle:
+Build the production Tauri bundle (app + dmg):
 
 ```bash
-npm run tauri:build
+npm run tauri build
 ```
 
-Artifacts will be in `src-tauri/target/release/bundle/` (platform-specific subfolders).
+The macOS app bundle will be in `src-tauri/target/release/bundle/macos/`.
 
 ### Windows (opt-in)
 
@@ -248,8 +104,8 @@ Artifacts will be in:
 
 - `src-tauri/target/release/bundle/nsis/` (installer exe)
 - `src-tauri/target/release/bundle/msi/` (msi)
- 
-Note: building from source on Windows requires LLVM/Clang (for `bindgen` / `libclang`) in addition to CMake.
+
+Note: dictation is currently disabled on Windows builds (to avoid requiring LLVM/libclang for `whisper-rs`/bindgen).
 
 ## Type Checking
 
@@ -261,73 +117,39 @@ npm run typecheck
 
 Note: `npm run build` also runs `tsc` before bundling the frontend.
 
-## Validation
-
-Recommended validation commands:
-
-```bash
-npm run lint
-npm run test
-npm run typecheck
-cd src-tauri && cargo check
-```
-
-## Codebase Navigation
-
-For task-oriented file lookup ("if you need X, edit Y"), use:
-
-- `docs/codebase-map.md`
-
 ## Project Structure
 
 ```
 src/
   features/         feature-sliced UI + hooks
-  features/app/bootstrap/      app bootstrap orchestration
-  features/app/orchestration/  app layout/thread/workspace orchestration
-  features/threads/hooks/threadReducer/  thread reducer slices
   services/         Tauri IPC wrapper
   styles/           split CSS by area
   types.ts          shared types
 src-tauri/
-  src/lib.rs        Tauri app backend command registry
-  src/bin/codex_monitor_daemon.rs  remote daemon JSON-RPC process
-  src/bin/codex_monitor_daemon/rpc/  daemon RPC domain handlers
-  src/shared/       shared backend core used by app + daemon
-  src/shared/git_ui_core/      git/github shared core modules
-  src/shared/workspaces_core/  workspace/worktree shared core modules
-  src/workspaces/   workspace/worktree adapters
-  src/codex/        codex app-server adapters
-  src/files/        file adapters
+  src/lib.rs        Tauri backend + codex app-server client
   tauri.conf.json   window configuration
 ```
 
 ## Notes
 
 - Workspaces persist to `workspaces.json` under the app data directory.
-- App settings persist to `settings.json` under the app data directory (theme, backend mode/provider, remote endpoints/tokens, Codex path, default access mode, UI scale, follow-up message behavior).
-- Feature settings are supported in the UI and synced to `$CODEX_HOME/config.toml` (or `~/.codex/config.toml`) on load/save. Stable: Collaboration modes (`features.collaboration_modes`), personality (`personality`), and Background terminal (`features.unified_exec`). Experimental: Apps (`features.apps`). Steering capability still follows Codex `features.steer`, but follow-up default behavior is controlled in Settings → Composer.
+- App settings persist to `settings.json` under the app data directory (Codex path, default access mode, UI scale).
+- Feature settings are supported in the UI and synced to `$CODEX_HOME/config.toml` (or `~/.codex/config.toml`) on load/save. Stable: Collaboration modes (`features.collaboration_modes`), personality (`personality`), Steer mode (`features.steer`), and Background terminal (`features.unified_exec`). Experimental: Collab mode (`features.collab`) and Apps (`features.apps`).
 - On launch and on window focus, the app reconnects and refreshes thread lists for each workspace.
 - Threads are restored by filtering `thread/list` results using the workspace `cwd`.
 - Selecting a thread always calls `thread/resume` to refresh messages from disk.
 - CLI sessions appear if their `cwd` matches the workspace path; they are not live-streamed unless resumed.
-- The app uses `codex app-server` over stdio; see `src-tauri/src/lib.rs` and `src-tauri/src/codex/`.
-- The remote daemon entrypoint is `src-tauri/src/bin/codex_monitor_daemon.rs`; RPC routing lives in `src-tauri/src/bin/codex_monitor_daemon/rpc.rs` and domain handlers in `src-tauri/src/bin/codex_monitor_daemon/rpc/`.
-- Shared domain logic lives in `src-tauri/src/shared/` (notably `src-tauri/src/shared/git_ui_core/` and `src-tauri/src/shared/workspaces_core/`).
-- Codex home resolves from workspace settings (if set), then legacy `.codexmonitor/`, then `$CODEX_HOME`/`~/.codex`.
+- The app uses `codex app-server` over stdio; see `src-tauri/src/lib.rs`.
+- Codex sessions use the default Codex home (usually `~/.codex`); if a legacy `.codexmonitor/` exists in a workspace, it is used for that workspace.
 - Worktree agents live under the app data directory (`worktrees/<workspace-id>`); legacy `.codex-worktrees/` paths remain supported, and the app no longer edits repo `.gitignore` files.
 - UI state (panel sizes, reduced transparency toggle, recent thread activity) is stored in `localStorage`.
 - Custom prompts load from `$CODEX_HOME/prompts` (or `~/.codex/prompts`) with optional frontmatter description/argument hints.
 
 ## Tauri IPC Surface
 
-Frontend calls live in `src/services/tauri.ts` and map to commands in `src-tauri/src/lib.rs`. The current surface includes:
+Frontend calls live in `src/services/tauri.ts` and map to commands in `src-tauri/src/lib.rs`. Core commands include:
 
-- Settings/config/files: `get_app_settings`, `update_app_settings`, `get_codex_config_path`, `get_config_model`, `file_read`, `file_write`, `codex_doctor`, `menu_set_accelerators`.
-- Workspaces/worktrees: `list_workspaces`, `is_workspace_path_dir`, `add_workspace`, `add_clone`, `add_worktree`, `worktree_setup_status`, `worktree_setup_mark_ran`, `rename_worktree`, `rename_worktree_upstream`, `apply_worktree_changes`, `update_workspace_settings`, `remove_workspace`, `remove_worktree`, `connect_workspace`, `list_workspace_files`, `read_workspace_file`, `open_workspace_in`, `get_open_app_icon`.
-- Threads/turns/reviews: `start_thread`, `fork_thread`, `compact_thread`, `list_threads`, `resume_thread`, `archive_thread`, `set_thread_name`, `send_user_message`, `turn_interrupt`, `respond_to_server_request`, `start_review`, `remember_approval_rule`, `get_commit_message_prompt`, `generate_commit_message`, `generate_run_metadata`.
-- Account/models/collaboration: `model_list`, `account_rate_limits`, `account_read`, `skills_list`, `apps_list`, `collaboration_mode_list`, `codex_login`, `codex_login_cancel`, `list_mcp_server_status`.
-- Git/GitHub: `get_git_status`, `list_git_roots`, `get_git_diffs`, `get_git_log`, `get_git_commit_diff`, `get_git_remote`, `stage_git_file`, `stage_git_all`, `unstage_git_file`, `revert_git_file`, `revert_git_all`, `commit_git`, `push_git`, `pull_git`, `fetch_git`, `sync_git`, `list_git_branches`, `checkout_git_branch`, `create_git_branch`, `get_github_issues`, `get_github_pull_requests`, `get_github_pull_request_diff`, `get_github_pull_request_comments`.
-- Prompts: `prompts_list`, `prompts_create`, `prompts_update`, `prompts_delete`, `prompts_move`, `prompts_workspace_dir`, `prompts_global_dir`.
-- Terminal/dictation/notifications/usage: `terminal_open`, `terminal_write`, `terminal_resize`, `terminal_close`, `dictation_model_status`, `dictation_download_model`, `dictation_cancel_download`, `dictation_remove_model`, `dictation_request_permission`, `dictation_start`, `dictation_stop`, `dictation_cancel`, `send_notification_fallback`, `is_macos_debug_build`, `local_usage_snapshot`.
-- Remote backend helpers: `tailscale_status`, `tailscale_daemon_command_preview`, `tailscale_daemon_start`, `tailscale_daemon_stop`, `tailscale_daemon_status`.
+- Workspace lifecycle: `list_workspaces`, `add_workspace`, `add_worktree`, `remove_workspace`, `remove_worktree`, `connect_workspace`, `update_workspace_settings`.
+- Threads: `start_thread`, `list_threads`, `resume_thread`, `archive_thread`, `send_user_message`, `turn_interrupt`, `respond_to_server_request`.
+- Reviews + models: `start_review`, `model_list`, `account_rate_limits`, `skills_list`.
+- Git + files: `get_git_status`, `get_git_diffs`, `get_git_log`, `get_git_remote`, `list_git_branches`, `checkout_git_branch`, `create_git_branch`, `list_workspace_files`.

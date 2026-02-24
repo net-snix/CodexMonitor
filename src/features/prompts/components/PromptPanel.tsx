@@ -7,12 +7,7 @@ import {
 } from "react";
 import type { CustomPromptOption } from "../../../types";
 import { expandCustomPromptText, getPromptArgumentHint } from "../../../utils/customPrompts";
-import type { PanelTabId } from "../../layout/components/PanelTabs";
-import { PanelShell } from "../../layout/components/PanelShell";
-import {
-  PanelMeta,
-  PanelSearchField,
-} from "../../design-system/components/panel/PanelPrimitives";
+import { PanelTabs, type PanelTabId } from "../../layout/components/PanelTabs";
 import { Menu, MenuItem } from "@tauri-apps/api/menu";
 import { LogicalPosition } from "@tauri-apps/api/dpi";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -405,28 +400,24 @@ export function PromptPanel({
   };
 
   return (
-    <PanelShell
-      filePanelMode={filePanelMode}
-      onFilePanelModeChange={onFilePanelModeChange}
-      className="prompt-panel"
-      headerClassName="git-panel-header"
-      headerRight={
-        <PanelMeta className="prompt-panel-meta">
+    <aside className="diff-panel prompt-panel">
+      <div className="git-panel-header">
+        <PanelTabs active={filePanelMode} onSelect={onFilePanelModeChange} />
+        <div className="prompt-panel-meta">
           {hasPrompts ? `${totalCount} prompt${totalCount === 1 ? "" : "s"}` : "No prompts"}
-        </PanelMeta>
-      }
-      search={
-        <PanelSearchField
-          className="file-tree-search"
-          inputClassName="file-tree-search-input"
+        </div>
+      </div>
+      <div className="file-tree-search">
+        <Search className="file-tree-search-icon" aria-hidden />
+        <input
+          className="file-tree-search-input"
+          type="search"
           placeholder="Filter prompts"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           aria-label="Filter prompts"
-          icon={<Search aria-hidden />}
         />
-      }
-    >
+      </div>
       <div className="prompt-panel-scroll">
         {editor && (
           <div className="prompt-editor">
@@ -598,6 +589,6 @@ export function PromptPanel({
           )}
         </div>
       </div>
-    </PanelShell>
+    </aside>
   );
 }

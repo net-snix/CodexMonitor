@@ -1,19 +1,17 @@
 import type {
-  CreditsSnapshot,
-  RateLimitWindow,
   RateLimitSnapshot,
   ReviewTarget,
   ThreadTokenUsage,
   TurnPlan,
   TurnPlanStep,
   TurnPlanStepStatus,
-} from "@/types";
+} from "../../../types";
 
 export function asString(value: unknown) {
   return typeof value === "string" ? value : value ? String(value) : "";
 }
 
-function asNumber(value: unknown): number {
+export function asNumber(value: unknown): number {
   if (typeof value === "number" && Number.isFinite(value)) {
     return value;
   }
@@ -26,96 +24,6 @@ function asNumber(value: unknown): number {
   return 0;
 }
 
-function asFiniteNumber(value: unknown): number | null {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value;
-  }
-  if (typeof value === "string" && value.trim()) {
-    const parsed = Number(value);
-    if (Number.isFinite(parsed)) {
-      return parsed;
-    }
-  }
-  return null;
-}
-
-function clampPercent(value: number): number {
-  return Math.min(Math.max(value, 0), 100);
-}
-
-function hasOwn(source: Record<string, unknown>, key: string): boolean {
-  return Object.prototype.hasOwnProperty.call(source, key);
-}
-
-function readOptionalNumber(
-  candidate: unknown,
-  fallback: number | null,
-): number | null {
-  const parsed = asFiniteNumber(candidate);
-  return parsed !== null ? parsed : fallback;
-}
-
-function normalizeRateLimitWindow(
-  source: Record<string, unknown>,
-  previousWindow: RateLimitWindow | null,
-): RateLimitWindow | null {
-  const directUsed = asFiniteNumber(source.usedPercent ?? source.used_percent);
-  const remaining = asFiniteNumber(
-    source.remainingPercent ?? source.remaining_percent ?? source.remaining,
-  );
-
-  let usedPercent: number | null = null;
-  if (directUsed !== null) {
-    usedPercent = clampPercent(directUsed);
-  } else if (remaining !== null) {
-    usedPercent = clampPercent(100 - remaining);
-  } else if (previousWindow) {
-    usedPercent = previousWindow.usedPercent;
-  }
-
-  if (usedPercent === null) {
-    return null;
-  }
-
-  return {
-    usedPercent,
-    windowDurationMins: readOptionalNumber(
-      source.windowDurationMins ?? source.window_duration_mins,
-      previousWindow?.windowDurationMins ?? null,
-    ),
-    resetsAt: readOptionalNumber(
-      source.resetsAt ?? source.resets_at,
-      previousWindow?.resetsAt ?? null,
-    ),
-  };
-}
-
-function normalizeCreditsSnapshot(
-  source: Record<string, unknown>,
-  previousCredits: CreditsSnapshot | null,
-): CreditsSnapshot {
-  const hasCreditsRaw = source.hasCredits ?? source.has_credits;
-  const unlimitedRaw = source.unlimited;
-  const balanceRaw = source.balance;
-
-  return {
-    hasCredits:
-      typeof hasCreditsRaw === "boolean"
-        ? hasCreditsRaw
-        : previousCredits?.hasCredits ?? false,
-    unlimited:
-      typeof unlimitedRaw === "boolean"
-        ? unlimitedRaw
-        : previousCredits?.unlimited ?? false,
-    balance:
-      typeof balanceRaw === "string"
-        ? balanceRaw
-        : balanceRaw === null
-          ? null
-          : previousCredits?.balance ?? null,
-  };
-}
-
 export function normalizeStringList(value: unknown) {
   if (Array.isArray(value)) {
     return value.map((entry) => asString(entry)).filter(Boolean);
@@ -125,17 +33,7 @@ export function normalizeStringList(value: unknown) {
 }
 
 export function normalizeRootPath(value: string) {
-  const normalized = value.replace(/\\/g, "/").replace(/\/+$/, "");
-  if (!normalized) {
-    return "";
-  }
-  if (/^[A-Za-z]:\//.test(normalized)) {
-    return normalized.toLowerCase();
-  }
-  if (normalized.startsWith("//")) {
-    return normalized.toLowerCase();
-  }
-  return normalized;
+  return value.replace(/\\/g, "/").replace(/\/+$/, "");
 }
 
 export function extractRpcErrorMessage(response: unknown) {
@@ -175,12 +73,9 @@ export function extractReviewThreadId(response: unknown): string | null {
   return threadId || null;
 }
 
-export function normalizeTokenUsage(
-  raw: Record<string, unknown> | null | undefined,
-): ThreadTokenUsage {
-  const source = raw ?? {};
-  const total = (source.total as Record<string, unknown>) ?? {};
-  const last = (source.last as Record<string, unknown>) ?? {};
+export function normalizeTokenUsage(raw: Record<string, unknown>): ThreadTokenUsage {
+  const total = (raw.total as Record<string, unknown>) ?? {};
+  const last = (raw.last as Record<string, unknown>) ?? {};
   return {
     total: {
       totalTokens: asNumber(total.totalTokens ?? total.total_tokens),
@@ -203,7 +98,7 @@ export function normalizeTokenUsage(
       ),
     },
     modelContextWindow: (() => {
-      const value = source.modelContextWindow ?? source.model_context_window;
+      const value = raw.modelContextWindow ?? raw.model_context_window;
       if (typeof value === "number") {
         return value;
       }
@@ -216,73 +111,82 @@ export function normalizeTokenUsage(
   };
 }
 
-export function normalizeRateLimits(
-  raw: Record<string, unknown>,
-  previous: RateLimitSnapshot | null = null,
-): RateLimitSnapshot {
-  const previousPrimary = previous?.primary ?? null;
-  const previousSecondary = previous?.secondary ?? null;
-  const previousCredits = previous?.credits ?? null;
-
-  const primary =
-    hasOwn(raw, "primary")
-      ? raw.primary === null
-        ? null
-        : raw.primary &&
-            typeof raw.primary === "object" &&
-            !Array.isArray(raw.primary)
-          ? normalizeRateLimitWindow(
-              raw.primary as Record<string, unknown>,
-              previousPrimary,
-            )
-          : previousPrimary
-      : previousPrimary;
-
-  const secondary =
-    hasOwn(raw, "secondary")
-      ? raw.secondary === null
-        ? null
-        : raw.secondary &&
-            typeof raw.secondary === "object" &&
-            !Array.isArray(raw.secondary)
-          ? normalizeRateLimitWindow(
-              raw.secondary as Record<string, unknown>,
-              previousSecondary,
-            )
-          : previousSecondary
-      : previousSecondary;
-
-  const credits =
-    hasOwn(raw, "credits")
-      ? raw.credits === null
-        ? null
-        : raw.credits &&
-            typeof raw.credits === "object" &&
-            !Array.isArray(raw.credits)
-          ? normalizeCreditsSnapshot(
-              raw.credits as Record<string, unknown>,
-              previousCredits,
-            )
-          : previousCredits
-      : previousCredits;
-
-  const hasPlanTypeKey = hasOwn(raw, "planType") || hasOwn(raw, "plan_type");
-  const planTypeValue =
-    typeof raw.planType === "string"
-      ? raw.planType
-      : typeof raw.plan_type === "string"
-        ? raw.plan_type
-        : null;
-
+export function normalizeRateLimits(raw: Record<string, unknown>): RateLimitSnapshot {
+  const primary = (raw.primary as Record<string, unknown>) ?? null;
+  const secondary = (raw.secondary as Record<string, unknown>) ?? null;
+  const credits = (raw.credits as Record<string, unknown>) ?? null;
   return {
-    primary,
-    secondary,
-    credits,
-    planType: planTypeValue ?? (hasPlanTypeKey ? null : previous?.planType ?? null),
+    primary: primary
+      ? {
+          usedPercent: asNumber(primary.usedPercent ?? primary.used_percent),
+          windowDurationMins: (() => {
+            const value = primary.windowDurationMins ?? primary.window_duration_mins;
+            if (typeof value === "number") {
+              return value;
+            }
+            if (typeof value === "string") {
+              const parsed = Number(value);
+              return Number.isFinite(parsed) ? parsed : null;
+            }
+            return null;
+          })(),
+          resetsAt: (() => {
+            const value = primary.resetsAt ?? primary.resets_at;
+            if (typeof value === "number") {
+              return value;
+            }
+            if (typeof value === "string") {
+              const parsed = Number(value);
+              return Number.isFinite(parsed) ? parsed : null;
+            }
+            return null;
+          })(),
+        }
+      : null,
+    secondary: secondary
+      ? {
+          usedPercent: asNumber(secondary.usedPercent ?? secondary.used_percent),
+          windowDurationMins: (() => {
+            const value = secondary.windowDurationMins ?? secondary.window_duration_mins;
+            if (typeof value === "number") {
+              return value;
+            }
+            if (typeof value === "string") {
+              const parsed = Number(value);
+              return Number.isFinite(parsed) ? parsed : null;
+            }
+            return null;
+          })(),
+          resetsAt: (() => {
+            const value = secondary.resetsAt ?? secondary.resets_at;
+            if (typeof value === "number") {
+              return value;
+            }
+            if (typeof value === "string") {
+              const parsed = Number(value);
+              return Number.isFinite(parsed) ? parsed : null;
+            }
+            return null;
+          })(),
+        }
+      : null,
+    credits: credits
+      ? {
+          hasCredits: Boolean(credits.hasCredits ?? credits.has_credits),
+          unlimited: Boolean(credits.unlimited),
+          balance: typeof credits.balance === "string" ? credits.balance : null,
+        }
+      : null,
+    planType:
+      typeof raw.planType === "string"
+        ? raw.planType
+        : typeof raw.plan_type === "string"
+          ? raw.plan_type
+          : null,
   };
 }
 
-function normalizePlanStepStatus(value: unknown): TurnPlanStepStatus {
+export function normalizePlanStepStatus(value: unknown): TurnPlanStepStatus {
   const raw = typeof value === "string" ? value : "";
   const normalized = raw.replace(/[_\s-]/g, "").toLowerCase();
   if (normalized === "inprogress") {

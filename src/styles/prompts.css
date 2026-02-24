@@ -2,6 +2,11 @@
   gap: 12px;
 }
 
+.prompt-panel-meta {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
 .prompt-section {
   display: flex;
   flex-direction: column;
@@ -219,11 +224,6 @@
   font-size: 12px;
   border-radius: 8px;
   padding: 6px 8px;
-}
-
-.prompt-scope-select option {
-  background-color: var(--surface-popover);
-  color: var(--text-strong);
 }
 
 .prompt-editor-actions {

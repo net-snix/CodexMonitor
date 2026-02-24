@@ -1,5 +1,4 @@
 import {
-  memo,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -9,13 +8,10 @@ import {
   type ClipboardEvent,
 } from "react";
 import type {
-  AppMention,
   AppOption,
-  ComposerSendIntent,
   ComposerEditorSettings,
   CustomPromptOption,
   DictationTranscript,
-  FollowUpMessageBehavior,
   QueuedMessage,
   ThreadTokenUsage,
 } from "../../../types";
@@ -25,11 +21,6 @@ import type {
 } from "../../threads/hooks/useReviewPrompt";
 import { computeDictationInsertion } from "../../../utils/dictation";
 import { isComposingEvent } from "../../../utils/keys";
-import {
-  connectorMentionSlug,
-  resolveBoundAppMentions,
-  type AppMentionBinding,
-} from "../../apps/utils/appMentions";
 import {
   getFenceTriggerLine,
   getLineIndent,
@@ -44,24 +35,16 @@ import { usePromptHistory } from "../hooks/usePromptHistory";
 import { ComposerInput } from "./ComposerInput";
 import { ComposerMetaBar } from "./ComposerMetaBar";
 import { ComposerQueue } from "./ComposerQueue";
-import { isMacPlatform, isMobilePlatform } from "../../../utils/platformPaths";
-import type { CodexArgsOption } from "../../threads/utils/codexArgsProfiles";
 
 type ComposerProps = {
-  onSend: (
-    text: string,
-    images: string[],
-    appMentions?: AppMention[],
-    submitIntent?: ComposerSendIntent,
-  ) => void;
+  onSend: (text: string, images: string[]) => void;
+  onQueue: (text: string, images: string[]) => void;
   onStop: () => void;
   canStop: boolean;
   disabled?: boolean;
   appsEnabled: boolean;
   isProcessing: boolean;
-  steerAvailable: boolean;
-  followUpMessageBehavior: FollowUpMessageBehavior;
-  composerFollowUpHintEnabled: boolean;
+  steerEnabled: boolean;
   collaborationModes: { id: string; label: string }[];
   selectedCollaborationModeId: string | null;
   onSelectCollaborationMode: (id: string | null) => void;
@@ -72,9 +55,6 @@ type ComposerProps = {
   selectedEffort: string | null;
   onSelectEffort: (effort: string) => void;
   reasoningSupported: boolean;
-  codexArgsOptions?: CodexArgsOption[];
-  selectedCodexArgsOverride?: string | null;
-  onSelectCodexArgsOverride?: (value: string | null) => void;
   accessMode: "read-only" | "current" | "full-access";
   onSelectAccessMode: (mode: "read-only" | "current" | "full-access") => void;
   skills: { name: string; description?: string }[];
@@ -83,7 +63,6 @@ type ComposerProps = {
   files: string[];
   contextUsage?: ThreadTokenUsage | null;
   queuedMessages?: QueuedMessage[];
-  queuePausedReason?: string | null;
   onEditQueued?: (item: QueuedMessage) => void;
   onDeleteQueued?: (id: string) => void;
   sendLabel?: string;
@@ -139,13 +118,6 @@ type ComposerProps = {
   onReviewPromptUpdateCustomInstructions?: (value: string) => void;
   onReviewPromptConfirmCustom?: () => Promise<void>;
   onFileAutocompleteActiveChange?: (active: boolean) => void;
-  contextActions?: {
-    id: string;
-    label: string;
-    title?: string;
-    disabled?: boolean;
-    onSelect: () => void | Promise<void>;
-  }[];
 };
 
 const DEFAULT_EDITOR_SETTINGS: ComposerEditorSettings = {
@@ -160,16 +132,15 @@ const DEFAULT_EDITOR_SETTINGS: ComposerEditorSettings = {
 };
 const CARET_ANCHOR_GAP = 8;
 
-export const Composer = memo(function Composer({
+export function Composer({
   onSend,
+  onQueue,
   onStop,
   canStop,
   disabled = false,
   appsEnabled,
   isProcessing,
-  steerAvailable,
-  followUpMessageBehavior,
-  composerFollowUpHintEnabled,
+  steerEnabled,
   collaborationModes,
   selectedCollaborationModeId,
   onSelectCollaborationMode,
@@ -180,9 +151,6 @@ export const Composer = memo(function Composer({
   selectedEffort,
   onSelectEffort,
   reasoningSupported,
-  codexArgsOptions = [],
-  selectedCodexArgsOverride = null,
-  onSelectCodexArgsOverride,
   accessMode,
   onSelectAccessMode,
   skills,
@@ -191,7 +159,6 @@ export const Composer = memo(function Composer({
   files,
   contextUsage = null,
   queuedMessages = [],
-  queuePausedReason = null,
   onEditQueued,
   onDeleteQueued,
   sendLabel = "Send",
@@ -241,11 +208,9 @@ export const Composer = memo(function Composer({
   onReviewPromptUpdateCustomInstructions,
   onReviewPromptConfirmCustom,
   onFileAutocompleteActiveChange,
-  contextActions = [],
 }: ComposerProps) {
   const [text, setText] = useState(draftText);
   const [selectionStart, setSelectionStart] = useState<number | null>(null);
-  const [appMentionBindings, setAppMentionBindings] = useState<AppMentionBinding[]>([]);
   const [suggestionsStyle, setSuggestionsStyle] = useState<
     CSSProperties | undefined
   >(undefined);
@@ -254,25 +219,6 @@ export const Composer = memo(function Composer({
   const editorSettings = editorSettingsProp ?? DEFAULT_EDITOR_SETTINGS;
   const isDictationBusy = dictationState !== "idle";
   const canSend = text.trim().length > 0 || attachedImages.length > 0;
-  const isMac = isMacPlatform();
-  const followUpShortcutLabel = isMac ? "Shift+Cmd+Enter" : "Shift+Ctrl+Enter";
-  const effectiveFollowUpBehavior: FollowUpMessageBehavior =
-    followUpMessageBehavior === "steer" && steerAvailable ? "steer" : "queue";
-  const oppositeFollowUpIntent: ComposerSendIntent =
-    effectiveFollowUpBehavior === "queue" ? "steer" : "queue";
-  const oppositeFallsBackToQueue =
-    oppositeFollowUpIntent === "steer" && !steerAvailable;
-  const defaultSubmitIntent: ComposerSendIntent = isProcessing
-    ? effectiveFollowUpBehavior
-    : "default";
-  const oppositeSubmitIntent: ComposerSendIntent = isProcessing
-    ? oppositeFollowUpIntent
-    : "default";
-  const effectiveSendLabel = isProcessing
-    ? effectiveFollowUpBehavior === "steer"
-      ? "Steer"
-      : "Queue"
-    : sendLabel;
   const {
     expandFenceOnSpace,
     expandFenceOnEnter,
@@ -293,15 +239,6 @@ export const Composer = memo(function Composer({
       onDraftChange?.(next);
     },
     [onDraftChange],
-  );
-
-  const bindingsFromMentions = useCallback(
-    (mentions?: AppMention[]) =>
-      (mentions ?? []).map((mention) => ({
-        slug: connectorMentionSlug(mention.name),
-        mention,
-      })),
-    [],
   );
 
   const {
@@ -327,32 +264,6 @@ export const Composer = memo(function Composer({
     textareaRef,
     setText: setComposerText,
     setSelectionStart,
-    onItemApplied: (item, context) => {
-      if (context.triggerChar !== "$" || item.group !== "Apps" || !item.mentionPath) {
-        return;
-      }
-      const slug = context.insertedText.trim().toLowerCase();
-      if (!slug) {
-        return;
-      }
-      const nextBinding: AppMentionBinding = {
-        slug,
-        mention: {
-          name: item.label,
-          path: item.mentionPath,
-        },
-      };
-      setAppMentionBindings((prev) => {
-        const filtered = prev.filter(
-          (binding) =>
-            !(
-              binding.slug === nextBinding.slug &&
-              binding.mention.path === nextBinding.mention.path
-            ),
-        );
-        return [...filtered, nextBinding];
-      });
-    },
   });
   useEffect(() => {
     onFileAutocompleteActiveChange?.(fileTriggerActive);
@@ -416,7 +327,7 @@ export const Composer = memo(function Composer({
     [handleHistoryTextChange, handleTextChange],
   );
 
-  const handleSend = useCallback((submitIntent: ComposerSendIntent = "default") => {
+  const handleSend = useCallback(() => {
     if (disabled) {
       return;
     }
@@ -427,17 +338,10 @@ export const Composer = memo(function Composer({
     if (trimmed) {
       recordHistory(trimmed);
     }
-    const resolvedMentions = resolveBoundAppMentions(trimmed, appMentionBindings);
-    if (resolvedMentions.length > 0) {
-      onSend(trimmed, attachedImages, resolvedMentions, submitIntent);
-    } else {
-      onSend(trimmed, attachedImages, undefined, submitIntent);
-    }
+    onSend(trimmed, attachedImages);
     resetHistoryNavigation();
     setComposerText("");
-    setAppMentionBindings([]);
   }, [
-    appMentionBindings,
     attachedImages,
     disabled,
     onSend,
@@ -447,41 +351,47 @@ export const Composer = memo(function Composer({
     text,
   ]);
 
-  useEffect(() => {
-    setAppMentionBindings([]);
-  }, [historyKey]);
+  const handleQueue = useCallback(() => {
+    if (disabled) {
+      return;
+    }
+    const trimmed = text.trim();
+    if (!trimmed && attachedImages.length === 0) {
+      return;
+    }
+    if (trimmed) {
+      recordHistory(trimmed);
+    }
+    onQueue(trimmed, attachedImages);
+    resetHistoryNavigation();
+    setComposerText("");
+  }, [
+    attachedImages,
+    disabled,
+    onQueue,
+    recordHistory,
+    resetHistoryNavigation,
+    setComposerText,
+    text,
+  ]);
 
   useEffect(() => {
     if (!prefillDraft) {
       return;
     }
     setComposerText(prefillDraft.text);
-    setAppMentionBindings(bindingsFromMentions(prefillDraft.appMentions));
     resetHistoryNavigation();
     onPrefillHandled?.(prefillDraft.id);
-  }, [
-    bindingsFromMentions,
-    onPrefillHandled,
-    prefillDraft,
-    resetHistoryNavigation,
-    setComposerText,
-  ]);
+  }, [onPrefillHandled, prefillDraft, resetHistoryNavigation, setComposerText]);
 
   useEffect(() => {
     if (!insertText) {
       return;
     }
     setComposerText(insertText.text);
-    setAppMentionBindings(bindingsFromMentions(insertText.appMentions));
     resetHistoryNavigation();
     onInsertHandled?.(insertText.id);
-  }, [
-    bindingsFromMentions,
-    insertText,
-    onInsertHandled,
-    resetHistoryNavigation,
-    setComposerText,
-  ]);
+  }, [insertText, onInsertHandled, resetHistoryNavigation, setComposerText]);
 
   useEffect(() => {
     if (!dictationTranscript) {
@@ -641,56 +551,18 @@ export const Composer = memo(function Composer({
     <footer className={`composer${disabled ? " is-disabled" : ""}`}>
       <ComposerQueue
         queuedMessages={queuedMessages}
-        pausedReason={queuePausedReason}
         onEditQueued={onEditQueued}
         onDeleteQueued={onDeleteQueued}
       />
-      {isProcessing && composerFollowUpHintEnabled && (
-        <div className="composer-followup-hint" role="status" aria-live="polite">
-          <div className="composer-followup-title">Follow-up behavior</div>
-          <div className="composer-followup-copy">
-            {oppositeFallsBackToQueue ? (
-              <>
-                Default: Queue (Steer unavailable). Both Enter and {followUpShortcutLabel} will
-                queue this message.
-              </>
-            ) : (
-              <>
-                Default: {effectiveFollowUpBehavior === "steer" ? "Steer" : "Queue"}. Press{" "}
-                {followUpShortcutLabel} to{" "}
-                {oppositeFollowUpIntent === "steer" ? "steer" : "queue"} this message.
-              </>
-            )}
-          </div>
-        </div>
-      )}
-      {contextActions.length > 0 ? (
-        <div className="composer-context-actions" role="toolbar" aria-label="PR review tools">
-          {contextActions.map((action) => (
-            <button
-              key={action.id}
-              type="button"
-              className="ghost composer-context-action"
-              title={action.title}
-              disabled={disabled || Boolean(action.disabled)}
-              onClick={() => {
-                void action.onSelect();
-              }}
-            >
-              {action.label}
-            </button>
-          ))}
-        </div>
-      ) : null}
       <ComposerInput
         text={text}
         disabled={disabled}
-        sendLabel={effectiveSendLabel}
+        sendLabel={sendLabel}
         canStop={canStop}
         canSend={canSend}
         isProcessing={isProcessing}
         onStop={onStop}
-        onSend={() => handleSend(defaultSubmitIntent)}
+        onSend={handleSend}
         dictationEnabled={dictationEnabled}
         dictationState={dictationState}
         dictationLevel={dictationLevel}
@@ -717,23 +589,6 @@ export const Composer = memo(function Composer({
           if (event.defaultPrevented) {
             return;
           }
-          const isOppositeFollowUpShortcut =
-            event.key === "Enter" &&
-            event.shiftKey &&
-            (isMac ? event.metaKey : event.ctrlKey);
-          if (isOppositeFollowUpShortcut && !suggestionsOpen) {
-            if (isDictationBusy) {
-              event.preventDefault();
-              return;
-            }
-            event.preventDefault();
-            const dismissKeyboardAfterSend = canSend && isMobilePlatform();
-            handleSend(oppositeSubmitIntent);
-            if (dismissKeyboardAfterSend) {
-              textareaRef.current?.blur();
-            }
-            return;
-          }
           if (
             expandFenceOnSpace &&
             event.key === " " &&
@@ -753,13 +608,7 @@ export const Composer = memo(function Composer({
               return;
             }
           }
-          if (
-            event.key === "Enter" &&
-            event.shiftKey &&
-            !event.metaKey &&
-            !event.ctrlKey &&
-            !event.altKey
-          ) {
+          if (event.key === "Enter" && event.shiftKey) {
             if (continueListOnShiftEnter && !suggestionsOpen) {
               const textarea = textareaRef.current;
               if (textarea) {
@@ -791,6 +640,17 @@ export const Composer = memo(function Composer({
             applyTextInsertion(nextText, nextCursor);
             return;
           }
+          if (
+            event.key === "Tab" &&
+            !event.shiftKey &&
+            steerEnabled &&
+            isProcessing &&
+            !suggestionsOpen
+          ) {
+            event.preventDefault();
+            handleQueue();
+            return;
+          }
           if (reviewPromptOpen && onReviewPromptKeyDown) {
             const handled = onReviewPromptKeyDown(event);
             if (handled) {
@@ -818,11 +678,7 @@ export const Composer = memo(function Composer({
               return;
             }
             event.preventDefault();
-            const dismissKeyboardAfterSend = canSend && isMobilePlatform();
-            handleSend(defaultSubmitIntent);
-            if (dismissKeyboardAfterSend) {
-              textareaRef.current?.blur();
-            }
+            handleSend();
           }
         }}
         textareaRef={textareaRef}
@@ -863,15 +719,10 @@ export const Composer = memo(function Composer({
         selectedEffort={selectedEffort}
         onSelectEffort={onSelectEffort}
         reasoningSupported={reasoningSupported}
-        codexArgsOptions={codexArgsOptions}
-        selectedCodexArgsOverride={selectedCodexArgsOverride}
-        onSelectCodexArgsOverride={onSelectCodexArgsOverride}
         accessMode={accessMode}
         onSelectAccessMode={onSelectAccessMode}
         contextUsage={contextUsage}
       />
     </footer>
   );
-});
-
-Composer.displayName = "Composer";
+}

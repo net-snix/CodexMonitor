@@ -1,11 +1,15 @@
 import Layers from "lucide-react/dist/esm/icons/layers";
-import type { MouseEvent, ReactNode } from "react";
+import type { MouseEvent } from "react";
 
 import type { ThreadSummary, WorkspaceInfo } from "../../../types";
-import type { ThreadStatusById } from "../../../utils/threadStatus";
 import { ThreadList } from "./ThreadList";
 import { ThreadLoading } from "./ThreadLoading";
 import { WorktreeCard } from "./WorktreeCard";
+
+type ThreadStatusMap = Record<
+  string,
+  { isProcessing: boolean; hasUnread: boolean; isReviewing: boolean }
+>;
 
 type ThreadRowsResult = {
   pinnedRows: Array<{ thread: ThreadSummary; depth: number }>;
@@ -18,26 +22,22 @@ type WorktreeSectionProps = {
   worktrees: WorkspaceInfo[];
   deletingWorktreeIds: Set<string>;
   threadsByWorkspace: Record<string, ThreadSummary[]>;
-  threadStatusById: ThreadStatusById;
+  threadStatusById: ThreadStatusMap;
   threadListLoadingByWorkspace: Record<string, boolean>;
   threadListPagingByWorkspace: Record<string, boolean>;
   threadListCursorByWorkspace: Record<string, string | null>;
   expandedWorkspaces: Set<string>;
   activeWorkspaceId: string | null;
   activeThreadId: string | null;
-  pendingUserInputKeys?: Set<string>;
   getThreadRows: (
     threads: ThreadSummary[],
     isExpanded: boolean,
     workspaceId: string,
     getPinTimestamp: (workspaceId: string, threadId: string) => number | null,
-    pinVersion?: number,
   ) => ThreadRowsResult;
   getThreadTime: (thread: ThreadSummary) => string | null;
-  getThreadArgsBadge?: (workspaceId: string, threadId: string) => string | null;
   isThreadPinned: (workspaceId: string, threadId: string) => boolean;
   getPinTimestamp: (workspaceId: string, threadId: string) => number | null;
-  pinnedThreadsVersion: number;
   onSelectWorkspace: (id: string) => void;
   onConnectWorkspace: (workspace: WorkspaceInfo) => void;
   onToggleWorkspaceCollapse: (workspaceId: string, collapsed: boolean) => void;
@@ -51,9 +51,6 @@ type WorktreeSectionProps = {
   onShowWorktreeMenu: (event: MouseEvent, worktree: WorkspaceInfo) => void;
   onToggleExpanded: (workspaceId: string) => void;
   onLoadOlderThreads: (workspaceId: string) => void;
-  sectionLabel?: string;
-  sectionIcon?: ReactNode;
-  className?: string;
 };
 
 export function WorktreeSection({
@@ -67,13 +64,10 @@ export function WorktreeSection({
   expandedWorkspaces,
   activeWorkspaceId,
   activeThreadId,
-  pendingUserInputKeys,
   getThreadRows,
   getThreadTime,
-  getThreadArgsBadge,
   isThreadPinned,
   getPinTimestamp,
-  pinnedThreadsVersion,
   onSelectWorkspace,
   onConnectWorkspace,
   onToggleWorkspaceCollapse,
@@ -82,19 +76,16 @@ export function WorktreeSection({
   onShowWorktreeMenu,
   onToggleExpanded,
   onLoadOlderThreads,
-  sectionLabel = "Worktrees",
-  sectionIcon,
-  className,
 }: WorktreeSectionProps) {
   if (!worktrees.length) {
     return null;
   }
 
   return (
-    <div className={`worktree-section${className ? ` ${className}` : ""}`}>
+    <div className="worktree-section">
       <div className="worktree-header">
-        {sectionIcon ?? <Layers className="worktree-header-icon" aria-hidden />}
-        {sectionLabel}
+        <Layers className="worktree-header-icon" aria-hidden />
+        Worktrees
       </div>
       <div className="worktree-list">
         {worktrees.map((worktree) => {
@@ -118,7 +109,6 @@ export function WorktreeSection({
             isWorktreeExpanded,
             worktree.id,
             getPinTimestamp,
-            pinnedThreadsVersion,
           );
 
           return (
@@ -146,9 +136,7 @@ export function WorktreeSection({
                   activeWorkspaceId={activeWorkspaceId}
                   activeThreadId={activeThreadId}
                   threadStatusById={threadStatusById}
-                  pendingUserInputKeys={pendingUserInputKeys}
                   getThreadTime={getThreadTime}
-                  getThreadArgsBadge={getThreadArgsBadge}
                   isThreadPinned={isThreadPinned}
                   onToggleExpanded={onToggleExpanded}
                   onLoadOlderThreads={onLoadOlderThreads}

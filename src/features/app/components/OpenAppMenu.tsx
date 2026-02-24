@@ -1,7 +1,6 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
-import * as Sentry from "@sentry/react";
 import { openWorkspaceIn } from "../../../services/tauri";
 import { pushErrorToast } from "../../../services/toasts";
 import type { OpenAppTarget } from "../../../types";
@@ -10,12 +9,7 @@ import {
   DEFAULT_OPEN_APP_TARGETS,
   OPEN_APP_STORAGE_KEY,
 } from "../constants";
-import {
-  PopoverMenuItem,
-  SplitActionMenu,
-} from "../../design-system/components/popover/PopoverPrimitives";
 import { GENERIC_APP_ICON, getKnownOpenAppIcon } from "../utils/openAppIcons";
-import { useMenuController } from "../hooks/useMenuController";
 
 type OpenTarget = {
   id: string;
@@ -39,8 +33,8 @@ export function OpenAppMenu({
   onSelectOpenAppId,
   iconById = {},
 }: OpenAppMenuProps) {
-  const openMenu = useMenuController();
-  const { isOpen: openMenuOpen, containerRef: openMenuRef } = openMenu;
+  const [openMenuOpen, setOpenMenuOpen] = useState(false);
+  const openMenuRef = useRef<HTMLDivElement | null>(null);
   const availableTargets =
     openTargets.length > 0 ? openTargets : DEFAULT_OPEN_APP_TARGETS;
   const openAppId = useMemo(
@@ -67,14 +61,9 @@ export function OpenAppMenu({
 
   const fallbackTarget: OpenTarget = {
     id: DEFAULT_OPEN_APP_ID,
-    label:
-      DEFAULT_OPEN_APP_TARGETS.find((target) => target.id === DEFAULT_OPEN_APP_ID)
-        ?.label ??
-      DEFAULT_OPEN_APP_TARGETS[0]?.label ??
-      "Open",
+    label: DEFAULT_OPEN_APP_TARGETS[0]?.label ?? "Open",
     icon: getKnownOpenAppIcon(DEFAULT_OPEN_APP_ID) ?? GENERIC_APP_ICON,
     target:
-      DEFAULT_OPEN_APP_TARGETS.find((target) => target.id === DEFAULT_OPEN_APP_ID) ??
       DEFAULT_OPEN_APP_TARGETS[0] ?? {
         id: DEFAULT_OPEN_APP_ID,
         label: "VS Code",
@@ -91,18 +80,6 @@ export function OpenAppMenu({
 
   const reportOpenError = (error: unknown, target: OpenTarget) => {
     const message = error instanceof Error ? error.message : String(error);
-    Sentry.captureException(error instanceof Error ? error : new Error(message), {
-      tags: {
-        feature: "open-app-menu",
-      },
-      extra: {
-        path,
-        targetId: target.id,
-        targetKind: target.target.kind,
-        targetAppName: target.target.appName ?? null,
-        targetCommand: target.target.command ?? null,
-      },
-    });
     pushErrorToast({
       title: "Couldn’t open workspace",
       message,
@@ -113,6 +90,23 @@ export function OpenAppMenu({
       targetId: target.id,
     });
   };
+
+  useEffect(() => {
+    if (!openMenuOpen) {
+      return;
+    }
+    const handleClick = (event: MouseEvent) => {
+      const target = event.target as Node;
+      const openContains = openMenuRef.current?.contains(target) ?? false;
+      if (!openContains) {
+        setOpenMenuOpen(false);
+      }
+    };
+    window.addEventListener("mousedown", handleClick);
+    return () => {
+      window.removeEventListener("mousedown", handleClick);
+    };
+  }, [openMenuOpen]);
 
   const resolveAppName = (target: OpenTarget) =>
     (target.target.appName ?? "").trim();
@@ -171,7 +165,7 @@ export function OpenAppMenu({
     }
     onSelectOpenAppId(target.id);
     window.localStorage.setItem(OPEN_APP_STORAGE_KEY, target.id);
-    openMenu.close();
+    setOpenMenuOpen(false);
     await openWithTarget(target);
   };
 
@@ -183,11 +177,8 @@ export function OpenAppMenu({
       : "Set app name in Settings";
 
   return (
-    <SplitActionMenu
-      containerRef={openMenuRef}
-      className="open-app-menu"
-      buttonGroupClassName="open-app-button"
-      actionButton={
+    <div className="open-app-menu" ref={openMenuRef}>
+      <div className="open-app-button">
         <button
           type="button"
           className="ghost main-header-action open-app-action"
@@ -207,31 +198,40 @@ export function OpenAppMenu({
             {selectedOpenTarget.label}
           </span>
         </button>
-      }
-      isOpen={openMenuOpen}
-      onToggle={openMenu.toggle}
-      toggleClassName="ghost main-header-action open-app-toggle"
-      toggleAriaLabel="Select editor"
-      toggleTitle="Select editor"
-      toggleIcon={<ChevronDown size={14} aria-hidden />}
-      popoverClassName="open-app-dropdown"
-      popoverRole="menu"
-    >
-      {resolvedOpenTargets.map((target) => (
-        // Keep entries visible but disable ones missing required config.
-        <PopoverMenuItem
-          key={target.id}
-          className="open-app-option"
-          onClick={() => handleSelectOpenTarget(target)}
-          disabled={!canOpenTarget(target)}
-          role="menuitem"
+        <button
+          type="button"
+          className="ghost main-header-action open-app-toggle"
+          onClick={() => setOpenMenuOpen((prev) => !prev)}
           data-tauri-drag-region="false"
-          icon={<img className="open-app-icon" src={target.icon} alt="" aria-hidden />}
-          active={target.id === resolvedOpenAppId}
+          aria-haspopup="menu"
+          aria-expanded={openMenuOpen}
+          aria-label="Select editor"
+          title="Select editor"
         >
-          {target.label}
-        </PopoverMenuItem>
-      ))}
-    </SplitActionMenu>
+          <ChevronDown size={14} aria-hidden />
+        </button>
+      </div>
+      {openMenuOpen && (
+        <div className="open-app-dropdown" role="menu">
+          {resolvedOpenTargets.map((target) => (
+            // Keep entries visible but disable ones missing required config.
+            <button
+              key={target.id}
+              type="button"
+              className={`open-app-option${
+                target.id === resolvedOpenAppId ? " is-active" : ""
+              }`}
+              onClick={() => handleSelectOpenTarget(target)}
+              disabled={!canOpenTarget(target)}
+              role="menuitem"
+              data-tauri-drag-region="false"
+            >
+              <img className="open-app-icon" src={target.icon} alt="" aria-hidden />
+              {target.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

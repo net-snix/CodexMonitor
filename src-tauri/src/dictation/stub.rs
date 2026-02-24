@@ -1,10 +1,10 @@
 use serde::Serialize;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Emitter, State};
 
 use crate::state::AppState;
 
 const DEFAULT_MODEL_ID: &str = "base";
-const UNSUPPORTED_MESSAGE: &str = "Dictation is not available on mobile builds.";
+const UNSUPPORTED_MESSAGE: &str = "Dictation is not supported on Windows builds.";
 
 #[derive(Debug, Serialize, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
@@ -41,6 +41,16 @@ pub(crate) enum DictationSessionState {
     Processing,
 }
 
+#[derive(Debug, Serialize, Clone)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub(crate) enum DictationEvent {
+    State { state: DictationSessionState },
+    Level { value: f32 },
+    Transcript { text: String },
+    Error { message: String },
+    Canceled { message: String },
+}
+
 pub(crate) struct DictationState {
     pub(crate) model_status: DictationModelStatus,
     pub(crate) session_state: DictationSessionState,
@@ -50,7 +60,7 @@ impl Default for DictationState {
     fn default() -> Self {
         Self {
             model_status: DictationModelStatus {
-                state: DictationModelState::Missing,
+                state: DictationModelState::Error,
                 model_id: DEFAULT_MODEL_ID.to_string(),
                 progress: None,
                 error: Some(UNSUPPORTED_MESSAGE.to_string()),
@@ -61,19 +71,38 @@ impl Default for DictationState {
     }
 }
 
-#[tauri::command]
-pub(crate) async fn dictation_model_status(
-    _app: AppHandle,
-    _state: State<'_, AppState>,
-    model_id: Option<String>,
-) -> Result<DictationModelStatus, String> {
-    Ok(DictationModelStatus {
-        state: DictationModelState::Missing,
+fn emit_status(app: &AppHandle, status: &DictationModelStatus) {
+    let _ = app.emit("dictation-download", status);
+}
+
+fn emit_event(app: &AppHandle, event: DictationEvent) {
+    let _ = app.emit("dictation-event", event);
+}
+
+fn windows_unsupported_status(model_id: Option<String>) -> DictationModelStatus {
+    DictationModelStatus {
+        state: DictationModelState::Error,
         model_id: model_id.unwrap_or_else(|| DEFAULT_MODEL_ID.to_string()),
         progress: None,
         error: Some(UNSUPPORTED_MESSAGE.to_string()),
         path: None,
-    })
+    }
+}
+
+#[tauri::command]
+pub(crate) async fn dictation_model_status(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    model_id: Option<String>,
+) -> Result<DictationModelStatus, String> {
+    let status = windows_unsupported_status(model_id);
+    {
+        let mut dictation = state.dictation.lock().await;
+        dictation.model_status = status.clone();
+        dictation.session_state = DictationSessionState::Idle;
+    }
+    emit_status(&app, &status);
+    Ok(status)
 }
 
 #[tauri::command]
@@ -82,7 +111,17 @@ pub(crate) async fn dictation_download_model(
     state: State<'_, AppState>,
     model_id: Option<String>,
 ) -> Result<DictationModelStatus, String> {
-    dictation_model_status(app, state, model_id).await
+    let status = dictation_model_status(app.clone(), state, model_id).await?;
+    emit_event(
+        &app,
+        DictationEvent::Error {
+            message: status
+                .error
+                .clone()
+                .unwrap_or_else(|| "Dictation is unavailable on Windows.".to_string()),
+        },
+    );
+    Ok(status)
 }
 
 #[tauri::command]
@@ -106,29 +145,51 @@ pub(crate) async fn dictation_remove_model(
 #[tauri::command]
 pub(crate) async fn dictation_start(
     _preferred_language: Option<String>,
-    _app: AppHandle,
-    _state: State<'_, AppState>,
+    app: AppHandle,
+    state: State<'_, AppState>,
 ) -> Result<DictationSessionState, String> {
-    Err(UNSUPPORTED_MESSAGE.to_string())
+    {
+        let mut dictation = state.dictation.lock().await;
+        dictation.session_state = DictationSessionState::Idle;
+    }
+    let message = UNSUPPORTED_MESSAGE.to_string();
+    emit_event(&app, DictationEvent::Error { message: message.clone() });
+    Err(message)
 }
 
 #[tauri::command]
 pub(crate) async fn dictation_request_permission(_app: AppHandle) -> Result<bool, String> {
-    Ok(false)
+    Err(UNSUPPORTED_MESSAGE.to_string())
 }
 
 #[tauri::command]
 pub(crate) async fn dictation_stop(
-    _app: AppHandle,
-    _state: State<'_, AppState>,
+    app: AppHandle,
+    state: State<'_, AppState>,
 ) -> Result<DictationSessionState, String> {
-    Err(UNSUPPORTED_MESSAGE.to_string())
+    {
+        let mut dictation = state.dictation.lock().await;
+        dictation.session_state = DictationSessionState::Idle;
+    }
+    let message = UNSUPPORTED_MESSAGE.to_string();
+    emit_event(&app, DictationEvent::Error { message: message.clone() });
+    Err(message)
 }
 
 #[tauri::command]
 pub(crate) async fn dictation_cancel(
-    _app: AppHandle,
-    _state: State<'_, AppState>,
+    app: AppHandle,
+    state: State<'_, AppState>,
 ) -> Result<DictationSessionState, String> {
-    Err(UNSUPPORTED_MESSAGE.to_string())
+    {
+        let mut dictation = state.dictation.lock().await;
+        dictation.session_state = DictationSessionState::Idle;
+    }
+    emit_event(
+        &app,
+        DictationEvent::Canceled {
+            message: "Canceled".to_string(),
+        },
+    );
+    Ok(DictationSessionState::Idle)
 }

@@ -2,7 +2,6 @@ import type { MutableRefObject } from "react";
 import { useTauriEvent } from "./useTauriEvent";
 import {
   subscribeMenuAddWorkspace,
-  subscribeMenuAddWorkspaceFromUrl,
   subscribeMenuNewAgent,
   subscribeMenuNewCloneAgent,
   subscribeMenuNewWorktreeAgent,
@@ -22,7 +21,6 @@ type Params = {
   activeWorkspaceRef: MutableRefObject<WorkspaceInfo | null>;
   baseWorkspaceRef: MutableRefObject<WorkspaceInfo | null>;
   onAddWorkspace: () => void;
-  onAddWorkspaceFromUrl: () => void;
   onAddAgent: (workspace: WorkspaceInfo) => void;
   onAddWorktreeAgent: (workspace: WorkspaceInfo) => void;
   onAddCloneAgent: (workspace: WorkspaceInfo) => void;
@@ -43,7 +41,6 @@ export function useAppMenuEvents({
   activeWorkspaceRef,
   baseWorkspaceRef,
   onAddWorkspace,
-  onAddWorkspaceFromUrl,
   onAddAgent,
   onAddWorktreeAgent,
   onAddCloneAgent,
@@ -82,10 +79,6 @@ export function useAppMenuEvents({
 
   useTauriEvent(subscribeMenuAddWorkspace, () => {
     onAddWorkspace();
-  });
-
-  useTauriEvent(subscribeMenuAddWorkspaceFromUrl, () => {
-    onAddWorkspaceFromUrl();
   });
 
   useTauriEvent(subscribeMenuOpenSettings, () => {

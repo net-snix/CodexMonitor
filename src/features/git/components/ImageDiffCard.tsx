@@ -1,7 +1,6 @@
 import { memo, useMemo } from "react";
 import ImageOff from "lucide-react/dist/esm/icons/image-off";
 import RotateCcw from "lucide-react/dist/esm/icons/rotate-ccw";
-import { splitPath } from "./GitDiffPanel.utils";
 
 type ImageDiffCardProps = {
   path: string;
@@ -44,8 +43,6 @@ export const ImageDiffCard = memo(function ImageDiffCard({
   showRevert = false,
   onRequestRevert,
 }: ImageDiffCardProps) {
-  const { name: fileName, dir } = useMemo(() => splitPath(path), [path]);
-  const displayDir = dir ? `${dir}/` : "";
   const oldDataUri = useMemo(
     () => {
       if (!oldImageData) return null;
@@ -96,10 +93,7 @@ export const ImageDiffCard = memo(function ImageDiffCard({
         <span className="diff-viewer-status" data-status={status}>
           {status}
         </span>
-        <span className="diff-viewer-path" title={path}>
-          <span className="diff-viewer-name">{fileName}</span>
-          {displayDir && <span className="diff-viewer-dir">{displayDir}</span>}
-        </span>
+        <span className="diff-viewer-path">{path}</span>
         {showRevert && (
           <button
             type="button"

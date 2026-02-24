@@ -2,8 +2,9 @@ export type WorkspaceSettings = {
   sidebarCollapsed: boolean;
   sortOrder?: number | null;
   groupId?: string | null;
-  cloneSourceWorkspaceId?: string | null;
   gitRoot?: string | null;
+  codexHome?: string | null;
+  codexArgs?: string | null;
   launchScript?: string | null;
   launchScripts?: LaunchScriptEntry[] | null;
   worktreeSetupScript?: string | null;
@@ -51,6 +52,7 @@ export type WorkspaceInfo = {
   name: string;
   path: string;
   connected: boolean;
+  codex_bin?: string | null;
   kind?: WorkspaceKind;
   parentId?: string | null;
   worktree?: WorktreeInfo | null;
@@ -66,16 +68,6 @@ export type Message = {
   id: string;
   role: "user" | "assistant";
   text: string;
-};
-
-export type CollabAgentRef = {
-  threadId: string;
-  nickname?: string;
-  role?: string;
-};
-
-export type CollabAgentStatus = CollabAgentRef & {
-  status: string;
 };
 
 export type ConversationItem =
@@ -105,26 +97,13 @@ export type ConversationItem =
       output?: string;
       durationMs?: number | null;
       changes?: { path: string; kind?: string; diff?: string }[];
-      collabSender?: CollabAgentRef;
-      collabReceiver?: CollabAgentRef;
-      collabReceivers?: CollabAgentRef[];
-      collabStatuses?: CollabAgentStatus[];
     };
 
 export type ThreadSummary = {
   id: string;
   name: string;
   updatedAt: number;
-  createdAt?: number;
-  modelId?: string | null;
-  effort?: string | null;
 };
-
-export type ThreadListSortKey = "created_at" | "updated_at";
-export type ThreadListOrganizeMode =
-  | "by_project"
-  | "by_project_activity"
-  | "threads_only";
 
 export type ReviewTarget =
   | { type: "uncommittedChanges" }
@@ -132,52 +111,11 @@ export type ReviewTarget =
   | { type: "commit"; sha: string; title?: string }
   | { type: "custom"; instructions: string };
 
-export type PullRequestReviewIntent =
-  | "full"
-  | "risks"
-  | "tests"
-  | "summary"
-  | "question";
-
-export type PullRequestReviewAction = {
-  id: string;
-  label: string;
-  intent: PullRequestReviewIntent;
-};
-
-export type PullRequestSelectionLine = {
-  type: "add" | "del" | "context";
-  oldLine: number | null;
-  newLine: number | null;
-  text: string;
-};
-
-export type PullRequestSelectionRange = {
-  path: string;
-  status: string;
-  start: number;
-  end: number;
-  lines: PullRequestSelectionLine[];
-};
-
 export type AccessMode = "read-only" | "current" | "full-access";
 export type BackendMode = "local" | "remote";
-export type RemoteBackendProvider = "tcp";
-export type RemoteBackendTarget = {
-  id: string;
-  name: string;
-  provider: RemoteBackendProvider;
-  host: string;
-  token: string | null;
-  lastConnectedAtMs?: number | null;
-};
 export type ThemePreference = "system" | "light" | "dark" | "dim" | "xp";
 export type PersonalityPreference = "friendly" | "pragmatic";
-export type FollowUpMessageBehavior = "queue" | "steer";
-export type ComposerSendIntent = "default" | "queue" | "steer";
-export type SendMessageResult = {
-  status: "sent" | "blocked" | "steer_failed";
-};
+
 
 export type ComposerEditorPreset = "default" | "helpful" | "smart";
 
@@ -201,16 +139,24 @@ export type OpenAppTarget = {
   args: string[];
 };
 
+export type CodexProfile = {
+  id: string;
+  label: string;
+  codexHome: string;
+  cachedEmail?: string | null;
+  cachedPlanType?: string | null;
+  lastUsedAt?: string | null;
+  createdAt?: string | null;
+};
+
 export type AppSettings = {
   codexBin: string | null;
   codexArgs: string | null;
+  codexProfiles: CodexProfile[];
+  activeCodexProfileId: string | null;
   backendMode: BackendMode;
-  remoteBackendProvider: RemoteBackendProvider;
   remoteBackendHost: string;
   remoteBackendToken: string | null;
-  remoteBackends: RemoteBackendTarget[];
-  activeRemoteBackendId: string | null;
-  keepDaemonRunningAfterAppClose: boolean;
   defaultAccessMode: AccessMode;
   reviewDeliveryMode: "inline" | "detached";
   composerModelShortcut: string | null;
@@ -236,25 +182,17 @@ export type AppSettings = {
   uiScale: number;
   theme: ThemePreference;
   usageShowRemaining: boolean;
-  showMessageFilePath: boolean;
-  chatHistoryScrollbackItems: number | null;
-  threadTitleAutogenerationEnabled: boolean;
+  autoSwitchOnLimit: boolean;
   uiFontFamily: string;
   codeFontFamily: string;
   codeFontSize: number;
   notificationSoundsEnabled: boolean;
   systemNotificationsEnabled: boolean;
-  subagentSystemNotificationsEnabled: boolean;
-  splitChatDiffView: boolean;
   preloadGitDiffs: boolean;
   gitDiffIgnoreWhitespaceChanges: boolean;
-  commitMessagePrompt: string;
-  commitMessageModelId: string | null;
+  experimentalCollabEnabled: boolean;
   collaborationModesEnabled: boolean;
   steerEnabled: boolean;
-  followUpMessageBehavior: FollowUpMessageBehavior;
-  composerFollowUpHintEnabled: boolean;
-  pauseQueuedMessagesWhenResponseRequired: boolean;
   unifiedExecEnabled: boolean;
   experimentalAppsEnabled: boolean;
   personality: PersonalityPreference;
@@ -276,53 +214,6 @@ export type AppSettings = {
   selectedOpenAppId: string;
 };
 
-export type CodexFeatureStage =
-  | "under_development"
-  | "beta"
-  | "stable"
-  | "deprecated"
-  | "removed";
-
-export type CodexFeature = {
-  name: string;
-  stage: CodexFeatureStage;
-  enabled: boolean;
-  defaultEnabled: boolean;
-  displayName: string | null;
-  description: string | null;
-  announcement: string | null;
-};
-
-export type TcpDaemonState = "stopped" | "running" | "error";
-
-export type TcpDaemonStatus = {
-  state: TcpDaemonState;
-  pid: number | null;
-  startedAtMs: number | null;
-  lastError: string | null;
-  listenAddr: string | null;
-};
-
-export type TailscaleStatus = {
-  installed: boolean;
-  running: boolean;
-  version: string | null;
-  dnsName: string | null;
-  hostName: string | null;
-  tailnetName: string | null;
-  ipv4: string[];
-  ipv6: string[];
-  suggestedRemoteHost: string | null;
-  message: string;
-};
-
-export type TailscaleDaemonCommandPreview = {
-  command: string;
-  daemonPath: string;
-  args: string[];
-  tokenConfigured: boolean;
-};
-
 export type CodexDoctorResult = {
   ok: boolean;
   codexBin: string | null;
@@ -333,19 +224,6 @@ export type CodexDoctorResult = {
   nodeOk: boolean;
   nodeVersion: string | null;
   nodeDetails: string | null;
-};
-
-export type CodexUpdateMethod = "brew_formula" | "brew_cask" | "npm" | "unknown";
-
-export type CodexUpdateResult = {
-  ok: boolean;
-  method: CodexUpdateMethod;
-  package: string | null;
-  beforeVersion: string | null;
-  afterVersion: string | null;
-  upgraded: boolean;
-  output: string | null;
-  details: string | null;
 };
 
 export type ApprovalRequest = {
@@ -578,12 +456,6 @@ export type QueuedMessage = {
   text: string;
   createdAt: number;
   images?: string[];
-  appMentions?: AppMention[];
-};
-
-export type AppMention = {
-  name: string;
-  path: string;
 };
 
 export type ModelOption = {

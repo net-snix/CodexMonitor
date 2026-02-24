@@ -6,16 +6,14 @@ type PhoneLayoutProps = {
   updateToastNode: ReactNode;
   errorToastsNode: ReactNode;
   tabBarNode: ReactNode;
-  homeNode: ReactNode;
   sidebarNode: ReactNode;
-  activeTab: "home" | "projects" | "codex" | "git" | "log";
+  activeTab: "projects" | "codex" | "git" | "log";
   activeWorkspace: boolean;
   showGitDetail: boolean;
   compactEmptyCodexNode: ReactNode;
   compactEmptyGitNode: ReactNode;
   compactGitBackNode: ReactNode;
   topbarLeftNode: ReactNode;
-  codexTopbarActionsNode?: ReactNode;
   messagesNode: ReactNode;
   composerNode: ReactNode;
   gitDiffPanelNode: ReactNode;
@@ -28,7 +26,6 @@ export function PhoneLayout({
   updateToastNode,
   errorToastsNode,
   tabBarNode,
-  homeNode,
   sidebarNode,
   activeTab,
   activeWorkspace,
@@ -37,7 +34,6 @@ export function PhoneLayout({
   compactEmptyGitNode,
   compactGitBackNode,
   topbarLeftNode,
-  codexTopbarActionsNode,
   messagesNode,
   composerNode,
   gitDiffPanelNode,
@@ -49,17 +45,12 @@ export function PhoneLayout({
       {approvalToastsNode}
       {updateToastNode}
       {errorToastsNode}
-      {activeTab === "home" && <div className="compact-panel">{homeNode}</div>}
       {activeTab === "projects" && <div className="compact-panel">{sidebarNode}</div>}
       {activeTab === "codex" && (
         <div className="compact-panel">
           {activeWorkspace ? (
             <>
-              <MainTopbar
-                leftNode={topbarLeftNode}
-                actionsNode={codexTopbarActionsNode}
-                className="compact-topbar"
-              />
+              <MainTopbar leftNode={topbarLeftNode} className="compact-topbar" />
               <div className="content compact-content">{messagesNode}</div>
               {composerNode}
             </>
@@ -71,17 +62,18 @@ export function PhoneLayout({
       {activeTab === "git" && (
         <div className="compact-panel">
           {!activeWorkspace && compactEmptyGitNode}
-          {activeWorkspace && (
+          {activeWorkspace && showGitDetail && (
+            <>
+              {compactGitBackNode}
+              <div className="compact-git-viewer">{gitDiffViewerNode}</div>
+            </>
+          )}
+          {activeWorkspace && !showGitDetail && (
             <>
               <MainTopbar leftNode={topbarLeftNode} className="compact-topbar" />
-              {compactGitBackNode}
-              {showGitDetail ? (
-                <div className="compact-git-viewer">{gitDiffViewerNode}</div>
-              ) : (
-                <div className="compact-git">
-                  <div className="compact-git-list">{gitDiffPanelNode}</div>
-                </div>
-              )}
+              <div className="compact-git">
+                <div className="compact-git-list">{gitDiffPanelNode}</div>
+              </div>
             </>
           )}
         </div>
