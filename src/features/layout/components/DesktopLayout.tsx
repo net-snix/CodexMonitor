@@ -10,7 +10,6 @@ type DesktopLayoutProps = {
   showHome: boolean;
   showWorkspace: boolean;
   topbarLeftNode: ReactNode;
-  topbarActionsNode?: ReactNode;
   centerMode: "chat" | "diff";
   preloadGitDiffs: boolean;
   messagesNode: ReactNode;
@@ -35,7 +34,6 @@ export function DesktopLayout({
   showHome,
   showWorkspace,
   topbarLeftNode,
-  topbarActionsNode,
   centerMode,
   preloadGitDiffs,
   messagesNode,
@@ -103,7 +101,7 @@ export function DesktopLayout({
 
         {showWorkspace && (
           <>
-            <MainTopbar leftNode={topbarLeftNode} actionsNode={topbarActionsNode} />
+            <MainTopbar leftNode={topbarLeftNode} />
             {approvalToastsNode}
             <div className="content">
               <div
@@ -130,7 +128,6 @@ export function DesktopLayout({
               onMouseDown={onRightPanelResizeStart}
             />
             <div className={`right-panel ${hasActivePlan ? "" : "plan-collapsed"}`}>
-              <div className="right-panel-drag-strip" />
               <div className="right-panel-top">{gitDiffPanelNode}</div>
               <div
                 className="right-panel-divider"

@@ -1,6 +1,6 @@
 .sidebar {
   --sidebar-padding: 20px;
-  padding: var(--sidebar-top-padding, 36px) var(--sidebar-padding) 56px;
+  padding: 36px var(--sidebar-padding) 56px;
   background: var(--surface-sidebar);
   backdrop-filter: none;
   border-right: 1px solid var(--border-subtle);
@@ -11,17 +11,7 @@
   min-height: 0;
   overflow: hidden;
   position: relative;
-  transition: opacity 200ms ease, transform 200ms ease, padding-top 180ms ease;
-}
-
-.sidebar-drag-strip {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: var(--side-panel-drag-strip-height, 0px);
-  z-index: var(--titlebar-drag-strip-z-index, 2);
-  pointer-events: var(--window-drag-strip-pointer-events, auto);
+  transition: opacity 200ms ease, transform 200ms ease;
 }
 
 .sidebar,
@@ -97,8 +87,7 @@
 .sidebar-header {
   display: flex;
   align-items: center;
-  gap: 10px;
-  min-height: 32px;
+  gap: 12px;
   padding: 0;
   margin-bottom: 0;
   -webkit-app-region: no-drag;
@@ -114,41 +103,29 @@
 .sidebar-title-group {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
 }
 
 .sidebar-title-button {
   min-width: 0;
-  margin-left: -6px;
-  padding: 4px 6px;
-  border-radius: 8px;
-  transition: background-color 120ms ease, color 120ms ease;
-}
-
-.sidebar-title-button:hover,
-.sidebar-title-button:focus-visible {
-  background: var(--surface-hover);
-  transform: none;
-  box-shadow: none;
 }
 
 .sidebar-title-add {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
+  width: 16px;
+  height: 16px;
   padding: 0;
   border: none;
   background: transparent;
   color: var(--text-muted);
   line-height: 1;
-  border-radius: 8px;
+  border-radius: 0;
   box-shadow: none;
   transform: none;
-  transition: background-color 120ms ease, color 120ms ease;
-  flex-shrink: 0;
+  transition: color 0.15s ease;
 }
 
 .sidebar-title-add svg {
@@ -168,13 +145,13 @@
 .sidebar-header-actions {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   margin-left: auto;
 }
 
 .sidebar-search-toggle {
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   padding: 0;
   border-radius: 8px;
   border: none;

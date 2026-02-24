@@ -10,7 +10,6 @@ import {
   archiveThread as archiveThreadService,
   forkThread as forkThreadService,
   listThreads as listThreadsService,
-  listWorkspaces as listWorkspacesService,
   resumeThread as resumeThreadService,
   startThread as startThreadService,
 } from "../../../services/tauri";
@@ -537,17 +536,6 @@ export function useThreadActions({
         payload: { workspaceId: workspace.id, cursor: nextCursor },
       });
       try {
-        try {
-          const knownWorkspaces = await listWorkspacesService();
-          if (knownWorkspaces.length > 0) {
-            workspacePathLookup = buildWorkspacePathLookup([
-              ...knownWorkspaces,
-              workspace,
-            ]);
-          }
-        } catch {
-          workspacePathLookup = buildWorkspacePathLookup([workspace]);
-        }
         const matchingThreads: Record<string, unknown>[] = [];
         const targetCount = 20;
         const pageSize = 20;
@@ -577,16 +565,8 @@ export function useThreadActions({
             (result?.nextCursor ?? result?.next_cursor ?? null) as string | null;
           matchingThreads.push(
             ...data.filter(
-              (thread) => {
-                const workspaceIds = resolveWorkspaceIdsForThreadPath(
-                  String(thread?.cwd ?? ""),
-                  workspacePathLookup,
-                );
-                if (workspaceIds.length === 0) {
-                  return false;
-                }
-                return workspaceIds.includes(workspace.id);
-              },
+              (thread) =>
+                normalizeRootPath(String(thread?.cwd ?? "")) === workspacePath,
             ),
           );
           cursor = next;
