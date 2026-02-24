@@ -6,6 +6,7 @@ import {
   archiveThread,
   forkThread,
   listThreads,
+  listWorkspaces,
   resumeThread,
   startThread,
 } from "../../../services/tauri";
@@ -24,6 +25,7 @@ vi.mock("../../../services/tauri", () => ({
   forkThread: vi.fn(),
   resumeThread: vi.fn(),
   listThreads: vi.fn(),
+  listWorkspaces: vi.fn(),
   archiveThread: vi.fn(),
 }));
 

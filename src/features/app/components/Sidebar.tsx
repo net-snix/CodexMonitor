@@ -376,6 +376,7 @@ export function Sidebar({
       onDragLeave={onWorkspaceDragLeave}
       onDrop={onWorkspaceDrop}
     >
+      <div className="sidebar-drag-strip" />
       <SidebarHeader
         onSelectHome={onSelectHome}
         onAddWorkspace={onAddWorkspace}

@@ -131,6 +131,7 @@ export const AppLayout = memo(function AppLayout({
       showHome={showHome}
       showWorkspace={activeWorkspace && !showHome}
       topbarLeftNode={desktopTopbarLeftNode}
+      topbarActionsNode={topbarActionsNode}
       centerMode={centerMode}
       preloadGitDiffs={preloadGitDiffs}
       messagesNode={messagesNode}
